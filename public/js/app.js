@@ -867,7 +867,25 @@ function showIncomingAlert(alertData) {
   };
 
   driverEmergencyAlert.classList.remove('hidden');
+
+  // 1. Native OS notification trigger (foreground alert)
+  if (Notification.permission === 'granted') {
+    new Notification('🚨 INCOMING EMERGENCY ALERT!', {
+      body: `Accident Victim is ${alertData.distanceKm.toFixed(2)} km away. Click to accept.`,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      vibrate: [200, 100, 200]
+    });
+  }
+
+  // 2. Default standard JS alert popup (delayed slightly to allow audio to initialize)
+  setTimeout(() => {
+    if (!driverEmergencyAlert.classList.contains('hidden')) {
+      alert(`⚠️ EMERGENCY DISPATCH ALERT!\n\nAn accident victim is requesting assistance.\nDistance: ${alertData.distanceKm.toFixed(2)} km.\n\nPlease accept the run on your dashboard!`);
+    }
+  }, 1000);
 }
+
 
 function hideIncomingAlert() {
   driverEmergencyAlert.classList.add('hidden');
