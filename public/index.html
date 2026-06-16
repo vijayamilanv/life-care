@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Emergency Ambulance Dispatch System</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Header Navigation -->
+  <header>
+    <div class="navbar">
+      <a href="#" class="brand" id="brand-link">
+        <i class="fa-solid fa-truck-medical brand-icon"></i>
+        <span class="brand-title">Smart<span class="text-cyan">Rescue</span></span>
+      </a>
+      
+      <div class="nav-right">
+        <!-- Notifications Bell -->
+        <button class="notifications-btn hidden" id="noti-bell-btn">
+          <i class="fa-regular fa-bell"></i>
+          <span class="badge-dot" id="noti-badge-dot"></span>
+        </button>
+
+        <!-- User Information Badge -->
+        <div class="user-badge hidden" id="user-display-badge">
+          <span id="user-display-name">Loading...</span>
+        </div>
+
+        <button class="btn btn-secondary" id="logout-btn" style="display: none;">
+          <i class="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notifications Sidebar Dropdown -->
+  <div class="notifications-panel" id="noti-panel">
+    <div class="notifications-header">
+      <h4>Notifications</h4>
+      <button class="btn btn-secondary" id="noti-clear-btn" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Clear All</button>
+    </div>
+    <div class="notifications-list" id="noti-list-container">
+      <div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No new notifications</div>
+    </div>
+  </div>
+
+  <main>
+    <!-- SCREEN 1: LANDING PAGE -->
+    <section class="screen active" id="screen-landing">
+      <div class="hero">
+        <h1 class="gradient-text">Instant Emergency <br>Ambulance Dispatch</h1>
+        <p>Connecting accident victims with nearby available ambulance drivers in real time. Saving crucial response time when every second counts.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="landing-request-btn">
+            <i class="fa-solid fa-kit-medical"></i> I Need an Ambulance
+          </button>
+          <button class="btn btn-secondary" id="landing-login-btn">
+            <i class="fa-solid fa-user-doctor"></i> Driver Portal
+          </button>
+        </div>
+      </div>
+
+      <div class="features-grid">
+        <div class="glass-card feature-card">
+          <div class="feature-icon text-danger">
+            <i class="fa-solid fa-location-crosshairs"></i>
+          </div>
+          <h3>GPS-Based Tracking</h3>
+          <p class="text-secondary-color mt-1">Automatic location sharing matches you instantly with drivers nearest to your accident site.</p>
+        </div>
+        <div class="glass-card feature-card">
+          <div class="feature-icon text-cyan">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <h3>Real-time Alerts</h3>
+          <p class="text-secondary-color mt-1">Available drivers receive loud sound alerts and instant dispatch sheets without delay.</p>
+        </div>
+        <div class="glass-card feature-card">
+          <div class="feature-icon text-success">
+            <i class="fa-solid fa-compass"></i>
+          </div>
+          <h3>Optimized Navigation</h3>
+          <p class="text-secondary-color mt-1">Direct Google Maps integrations route drivers instantly using turn-by-turn traffic data.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 2: AUTHENTICATION (LOGIN/SIGNUP) -->
+    <section class="screen" id="screen-auth">
+      <div class="auth-container glass-card">
+        <div class="auth-header">
+          <h2 id="auth-title" class="gradient-text">Welcome Back</h2>
+          <p id="auth-subtitle">Login to access your dispatch dashboard</p>
+        </div>
+
+        <div class="role-selector">
+          <button class="role-btn active" id="role-select-user">Citizen Portal</button>
+          <button class="role-btn" id="role-select-driver">Driver Portal</button>
+        </div>
+
+        <form id="auth-form">
+          <!-- Register fields (hidden by default during login) -->
+          <div class="form-group hidden" id="register-field-name">
+            <label for="input-name">Full Name</label>
+            <input type="text" class="form-control" id="input-name" placeholder="John Doe">
+          </div>
+
+          <div class="form-group">
+            <label for="input-email">Email Address</label>
+            <input type="email" class="form-control" id="input-email" placeholder="name@domain.com" required>
+          </div>
+
+          <div class="form-group">
+            <label for="input-password">Password</label>
+            <input type="password" class="form-control" id="input-password" placeholder="••••••••" required>
+          </div>
+
+          <!-- Register fields (hidden by default during login) -->
+          <div class="form-group hidden" id="register-field-phone">
+            <label for="input-phone">Phone Number</label>
+            <input type="tel" class="form-control" id="input-phone" placeholder="+91 98765 43210">
+          </div>
+
+          <!-- Driver signup fields (hidden by default unless driver role is active) -->
+          <div class="form-group hidden" id="driver-field-vehicle">
+            <label for="input-vehicle">Vehicle Plate Number</label>
+            <input type="text" class="form-control" id="input-vehicle" placeholder="KA-01-M-1234">
+          </div>
+
+          <div class="form-group hidden" id="driver-field-type">
+            <label for="select-ambulance">Ambulance Type</label>
+            <select class="form-control" id="select-ambulance">
+              <option value="Basic Life Support (BLS)">Basic Life Support (BLS)</option>
+              <option value="Advanced Cardiac Life Support (ACLS)">Advanced Cardiac Life Support (ACLS)</option>
+              <option value="Critical Care Transport (ICU)">Critical Care Transport (ICU)</option>
+              <option value="First Responder Unit">First Responder Unit</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block mt-3" id="auth-submit-btn">Login</button>
+        </form>
+
+        <div class="auth-footer">
+          <span id="auth-toggle-text">Don't have an account?</span>
+          <a href="#" id="auth-toggle-link">Sign Up</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 3: USER DASHBOARD -->
+    <section class="screen" id="screen-user-dashboard">
+      <div class="dashboard-grid">
+        <!-- Map Panel (Google Maps Integration Interface) -->
+        <div class="glass-card map-panel">
+          <div class="map-header">
+            <div class="map-title">
+              <i class="fa-solid fa-map-location-dot text-cyan"></i>
+              <span>Live Response Tracking</span>
+            </div>
+            <span class="user-badge" id="gps-status-badge">Detecting GPS...</span>
+          </div>
+          
+          <div class="map-container" id="user-map-container">
+            <!-- Simulated GPS coordinate grid -->
+            <div class="map-grid-bg"></div>
+            <div class="map-radar-ring" id="user-radar-ring" style="top: 50%; left: 50%;"></div>
+            
+            <!-- User Marker -->
+            <div class="map-marker user" id="user-map-marker" style="top: 50%; left: 50%;">
+              <i class="fa-solid fa-person-falling-burst"></i>
+              <span class="map-label">Accident Site</span>
+            </div>
+            
+            <!-- Assigned Driver Marker (Hidden by default until accepted) -->
+            <div class="map-marker driver hidden" id="driver-map-marker" style="top: 25%; left: 25%;">
+              <i class="fa-solid fa-truck-medical"></i>
+              <span class="map-label" id="driver-marker-label">Ambulance</span>
+            </div>
+
+            <div class="map-visual-placeholder" id="user-map-text">
+              <p class="text-secondary-color">Detecting live device coordinates...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side Panel -->
+        <div class="side-panel">
+          <!-- Case 1: Place Request -->
+          <div class="glass-card" id="user-request-panel">
+            <h3 class="mb-2">Request Assistance</h3>
+            <p class="text-secondary-color mb-3">Place a real-time emergency dispatch call. The system will find the nearest available ambulances using GPS coordinates.</p>
+            
+            <div class="form-group">
+              <label>Current Location Coordinates</label>
+              <div class="text-cyan font-bold" id="user-coords-display">Lat: --, Lng: --</div>
+            </div>
+
+            <button class="btn btn-danger btn-block mt-2" id="trigger-emergency-btn">
+              <i class="fa-solid fa-triangle-exclamation"></i> DISPATCH NOW
+            </button>
+          </div>
+
+          <!-- Case 2: Active Dispatch Info (Initially Hidden) -->
+          <div class="glass-card hidden" id="user-tracking-panel">
+            <div class="status-beacon mb-2">
+              <i class="fa-solid fa-house-chimney-medical status-beacon-icon"></i>
+            </div>
+            <h3 class="text-center" id="tracking-status-title">Searching for Ambulance...</h3>
+            <p class="text-secondary-color text-center mb-3" id="tracking-status-desc">Broadcasting dispatch tokens to nearby online drivers...</p>
+            
+            <div id="tracking-driver-details" class="hidden">
+              <hr class="mb-2" style="border: 1px solid var(--border-light);">
+              <h4 class="mb-2">Assigned Rescue Unit</h4>
+              <div class="list-item" style="background: rgba(255,255,255,0.02); margin-bottom: 1rem;">
+                <div class="list-item-header">
+                  <div>
+                    <div class="list-item-title" id="track-driver-name">Driver: Name</div>
+                    <div class="list-item-subtitle" id="track-vehicle-number">Plate: --</div>
+                  </div>
+                  <span class="list-item-badge cyan" id="track-ambulance-type">BLS</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 0.5rem;">
+                  <span>Distance: <strong class="text-cyan" id="track-distance">-- km</strong></span>
+                  <span>Est. Arrival: <strong class="text-success" id="track-eta">-- mins</strong></span>
+                </div>
+              </div>
+
+              <!-- Communication & Navigation Hrefs -->
+              <div style="display: flex; gap: 0.75rem;">
+                <a href="#" class="btn btn-secondary btn-block" id="call-driver-btn" style="flex-grow: 1;">
+                  <i class="fa-solid fa-phone"></i> Call Driver
+                </a>
+                <a href="#" target="_blank" class="btn btn-primary btn-block" id="user-google-maps-btn" style="flex-grow: 1;">
+                  <i class="fa-solid fa-route"></i> Map Route
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nearby List (Always Visible on Citizen Dashboard) -->
+          <div class="glass-card" id="nearby-ambulances-panel">
+            <div class="list-header">
+              <h3>Available Nearby</h3>
+              <span class="list-item-badge cyan" id="nearby-count">0 Online</span>
+            </div>
+            <div class="list-items" id="nearby-ambulances-list">
+              <div style="text-align: center; color: var(--text-muted); padding: 1.5rem 0;">No ambulances nearby</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 4: DRIVER DASHBOARD -->
+    <section class="screen" id="screen-driver-dashboard">
+      <!-- Status Controls -->
+      <div class="driver-controls">
+        <div>
+          <h3>Driver Console</h3>
+          <p class="text-secondary-color mt-1">Manage status and location coordinates broadcast.</p>
+        </div>
+        <div class="toggle-container">
+          <span class="switch-label text-secondary-color" id="driver-status-text">OFFLINE</span>
+          <label class="switch">
+            <input type="checkbox" id="driver-availability-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Real-time Emergency Alert Banner (Popping up dynamically) -->
+      <div class="alert-banner hidden" id="driver-emergency-alert">
+        <div class="alert-banner-info">
+          <h3 class="text-danger"><i class="fa-solid fa-circle-exclamation"></i> INCOMING EMERGENCY ALERT</h3>
+          <p class="mt-1">Distance to Accident Site: <strong class="text-cyan" id="alert-distance">-- km</strong></p>
+          <p class="text-secondary-color font-bold" id="alert-coords">Coords: --</p>
+        </div>
+        <div class="alert-banner-actions">
+          <button class="btn btn-secondary" id="alert-reject-btn">Reject</button>
+          <button class="btn btn-danger" id="alert-accept-btn">ACCEPT RUN</button>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- Map Panel (Simulated navigation/movement track) -->
+        <div class="glass-card map-panel">
+          <div class="map-header">
+            <div class="map-title">
+              <i class="fa-solid fa-compass text-cyan"></i>
+              <span>Navigation Console</span>
+            </div>
+            <span class="user-badge driver" id="driver-gps-status">GPS Streaming</span>
+          </div>
+          
+          <div class="map-container" id="driver-map-container">
+            <div class="map-grid-bg"></div>
+            <!-- Driver Marker (Static on driver console, represents themselves) -->
+            <div class="map-marker driver" id="driver-self-marker" style="top: 50%; left: 50%;">
+              <i class="fa-solid fa-truck-medical"></i>
+              <span class="map-label">My Location</span>
+            </div>
+            
+            <!-- Target User Marker (Visible during active request) -->
+            <div class="map-marker user hidden" id="driver-target-marker" style="top: 30%; left: 40%;">
+              <i class="fa-solid fa-person-falling-burst"></i>
+              <span class="map-label">Accident Site</span>
+            </div>
+
+            <div class="map-visual-placeholder" id="driver-map-text">
+              <p class="text-secondary-color">Location coordinate tracking active.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side Panel: Active Request Actions -->
+        <div class="side-panel">
+          <div class="glass-card" id="driver-empty-panel">
+            <h3>No Active Dispatches</h3>
+            <p class="text-secondary-color mt-2">Go online using the availability switch above to receive emergency alerts from accident victims.</p>
+          </div>
+
+          <!-- Active Dispatch Console -->
+          <div class="glass-card hidden" id="driver-active-panel">
+            <div class="list-item-badge danger mb-2" style="display:inline-block;">ACTIVE RUN</div>
+            <h3 class="mb-2">Rescue Destination</h3>
+            
+            <div class="list-item" style="background: rgba(255,255,255,0.02); margin-bottom: 1.5rem;">
+              <div class="list-item-header">
+                <div>
+                  <div class="list-item-title" id="active-user-name">Victim Name</div>
+                  <div class="list-item-subtitle" id="active-user-phone">Phone: --</div>
+                </div>
+              </div>
+              <div style="font-size: 0.85rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <div>Distance: <strong class="text-cyan" id="active-distance">-- km</strong></div>
+                <div id="active-coords-display">Location: --</div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <!-- Google Maps Directions Link (href) -->
+              <a href="#" target="_blank" class="btn btn-primary btn-block" id="driver-navigate-btn">
+                <i class="fa-solid fa-map-location-dot"></i> Navigate in Google Maps
+              </a>
+              <button class="btn btn-success btn-block" id="driver-arrive-btn">
+                <i class="fa-solid fa-location-arrow"></i> Mark Arrived
+              </button>
+              <button class="btn btn-secondary btn-block hidden" id="driver-complete-btn">
+                <i class="fa-solid fa-circle-check"></i> Complete Emergency
+              </button>
+            </div>
+          </div>
+
+          <!-- History / Logs Panel -->
+          <div class="glass-card">
+            <h3>Recent Activity</h3>
+            <div class="list-items" id="driver-activity-list" style="max-height: 200px;">
+              <div style="text-align: center; color: var(--text-muted); padding: 1rem 0;">No activities registered</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Sound Alert for Driver -->
+  <audio id="emergency-sound" loop src="https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav"></audio>
+
+  <!-- Load Socket.IO client library -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Custom Application Logic -->
+  <script src="js/api.js"></script>
+  <script src="js/socket.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
