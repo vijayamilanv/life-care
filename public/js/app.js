@@ -89,7 +89,60 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   loadSessionUser();
   requestUserLocation();
+  registerServiceWorker();
+  setupNetworkStatusListeners();
 });
+
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => console.log('SmartRescue PWA Service Worker registered. Scope:', reg.scope))
+        .catch((err) => console.warn('SmartRescue Service Worker registration failed:', err));
+    });
+  }
+}
+
+function setupNetworkStatusListeners() {
+  window.addEventListener('online', handleNetworkStateChange);
+  window.addEventListener('offline', handleNetworkStateChange);
+  // Perform initial check on load
+  handleNetworkStateChange();
+}
+
+function handleNetworkStateChange() {
+  const offlineBanner = document.getElementById('offline-banner');
+  const isOnline = navigator.onLine;
+
+  if (isOnline) {
+    if (offlineBanner) {
+      offlineBanner.classList.add('hidden');
+    }
+    if (triggerEmergencyBtn) {
+      triggerEmergencyBtn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> DISPATCH NOW';
+      triggerEmergencyBtn.classList.remove('btn-success');
+      triggerEmergencyBtn.classList.add('btn-danger');
+      // Reset onclick override
+      triggerEmergencyBtn.onclick = null;
+    }
+  } else {
+    if (offlineBanner) {
+      offlineBanner.classList.remove('hidden');
+    }
+    if (triggerEmergencyBtn) {
+      triggerEmergencyBtn.innerHTML = '<i class="fa-solid fa-phone-flip"></i> CALL EMERGENCY DIRECTLY (102)';
+      triggerEmergencyBtn.classList.remove('btn-danger');
+      triggerEmergencyBtn.classList.add('btn-success');
+      // Set override to dial number directly when clicked offline
+      triggerEmergencyBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.location.href = 'tel:102';
+      };
+    }
+  }
+}
+
 
 // --- STATE NAVIGATION & ROUTING ---
 function showScreen(screenKey) {

@@ -17,7 +17,8 @@
     "fastify": "^4.28.1",
     "fastify-socket.io": "^4.0.0",
     "pg": "^8.13.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "twilio": "*"
   },
   "devDependencies": {
     "jest": "^29.7.0",

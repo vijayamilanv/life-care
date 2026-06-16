@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { calculateDistance } = require('../utils/haversine');
+const { sendSMS } = require('../services/smsService');
 
 module.exports = async function (fastify, opts) {
 
@@ -52,13 +53,21 @@ module.exports = async function (fastify, opts) {
         [request.user.id, 'EMERGENCY_REQUEST', `Emergency request ${emergencyRequest.id} created`]
       );
 
-      // Find nearby available drivers to alert them
+      // Retrieve requester contact details for SMS dispatch
+      const requesterRes = await db.query('SELECT name, phone FROM users WHERE id = $1', [request.user.id]);
+      const requesterName = requesterRes.rows[0]?.name || 'Citizen';
+      const requesterPhone = requesterRes.rows[0]?.phone || 'Unknown';
+
+      // Find nearby available drivers and their contact numbers
       const driversQuery = `
         SELECT 
           d.id AS driver_id,
+          u.name AS driver_name,
+          u.phone AS driver_phone,
           dl.latitude,
           dl.longitude
         FROM drivers d
+        JOIN users u ON d.user_id = u.id
         JOIN driver_locations dl ON d.id = dl.driver_id
         WHERE d.is_available = true
       `;
@@ -68,9 +77,25 @@ module.exports = async function (fastify, opts) {
         const dist = calculateDistance(userLat, userLng, parseFloat(driver.latitude), parseFloat(driver.longitude));
         return {
           driverId: driver.driver_id,
+          driverName: driver.driver_name,
+          phone: driver.driver_phone,
           distanceKm: dist
         };
       });
+
+      // Sort nearest drivers first
+      alertedDrivers.sort((a, b) => a.distanceKm - b.distanceKm);
+
+      // Trigger fallback SMS dispatch to the absolute nearest available driver
+      if (alertedDrivers.length > 0) {
+        const nearestDriver = alertedDrivers[0];
+        const smsBody = `EMERGENCY ALERT! Accident Victim: ${requesterName} (Phone: ${requesterPhone}) is requesting assistance. Proximity: ${nearestDriver.distanceKm} km. Navigate: https://www.google.com/maps/dir/?api=1&destination=${userLat},${userLng}`;
+        
+        // Run SMS asynchronously in the background so it does not block the response
+        sendSMS(nearestDriver.phone, smsBody).catch(err => {
+          console.error('[SMS Service] Failed to trigger dispatch SMS to driver:', err.message);
+        });
+      }
 
       // Notify available drivers in real-time via Socket.IO
       if (fastify.io) {

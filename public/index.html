@@ -5,10 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Emergency Ambulance Dispatch System</title>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- PWA Support -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00f0ff">
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+
+  <!-- Offline Status Banner -->
+  <div class="offline-banner hidden" id="offline-banner">
+    <i class="fa-solid fa-cloud-bolt"></i> You are currently offline. Dispatch requests are suspended. Call Helpline: <a href="tel:102" style="color:var(--accent-cyan); font-weight:700;">102</a>
+  </div>
 
   <!-- Header Navigation -->
   <header>

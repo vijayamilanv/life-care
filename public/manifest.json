@@ -1,0 +1,24 @@
+{
+  "name": "Smart Rescue Emergency Dispatch",
+  "short_name": "SmartRescue",
+  "description": "Real-time emergency ambulance matching and live tracking system.",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0a0d16",
+  "theme_color": "#00f0ff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

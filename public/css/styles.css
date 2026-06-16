@@ -893,3 +893,26 @@ input:checked + .slider:before {
 .badge-dot.active {
   display: block;
 }
+
+/* Offline Status Warning Banner */
+.offline-banner {
+  background: rgba(239, 68, 68, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  text-align: center;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1001; /* Must sit above the sticky header (100) */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  animation: fadeIn 0.3s ease-out;
+}
+
