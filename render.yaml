@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: smart-rescue-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Set this to your Neon PostgreSQL URL in the Render Dashboard
+      - key: JWT_SECRET
+        generateValue: true # Generates a secure random JWT secret automatically
+      - key: PORT
+        value: 3000
