@@ -108,16 +108,31 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
+    sound: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav', // Native sound pathway
     vibrate: [200, 100, 200, 100, 200],
     data: {
       url: data.url || '/'
     }
   };
 
+  // Broadcast push data to any active window tabs to trigger in-app sirens
+  const promiseChain = clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+    windowClients.forEach((client) => {
+      client.postMessage({
+        type: 'EMERGENCY_PUSH_ALERT',
+        data: data
+      });
+    });
+  });
+
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    Promise.all([
+      self.registration.showNotification(data.title, options),
+      promiseChain
+    ])
   );
 });
+
 
 // Handle notification click (redirect to app tracking link)
 self.addEventListener('notificationclick', (event) => {

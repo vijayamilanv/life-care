@@ -97,11 +97,33 @@ function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js')
-        .then((reg) => console.log('SmartRescue PWA Service Worker registered. Scope:', reg.scope))
+        .then((reg) => {
+          console.log('SmartRescue PWA Service Worker registered. Scope:', reg.scope);
+          
+          // Listen for push notifications message channel updates from SW
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'EMERGENCY_PUSH_ALERT') {
+              console.log('[App] Received background push alert message from Service Worker.');
+              
+              // If driver is online and has no active dispatches, show alert card and play siren
+              if (currentUser && currentUser.role === 'driver' && driverAvailabilityToggle.checked && !activeRequest) {
+                const pushData = event.data.data;
+                // Parse parameters from web push payload or fallback
+                showIncomingAlert({
+                  requestId: pushData.requestId || (pushData.data && pushData.data.requestId) || 0,
+                  userLatitude: pushData.userLatitude || (pushData.data && pushData.data.userLatitude) || userCoords.latitude,
+                  userLongitude: pushData.userLongitude || (pushData.data && pushData.data.userLongitude) || userCoords.longitude,
+                  distanceKm: pushData.distanceKm || (pushData.data && pushData.data.distanceKm) || 1.2
+                });
+              }
+            }
+          });
+        })
         .catch((err) => console.warn('SmartRescue Service Worker registration failed:', err));
     });
   }
 }
+
 
 function setupNetworkStatusListeners() {
   window.addEventListener('online', handleNetworkStateChange);
