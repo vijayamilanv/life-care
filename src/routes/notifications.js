@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const pushService = require('../services/pushService');
+
 
 module.exports = async function (fastify, opts) {
 
@@ -49,6 +51,63 @@ module.exports = async function (fastify, opts) {
 
     } catch (error) {
       fastify.log.error('Mark read notifications error:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  });
+
+  // GET /api/notifications/vapid-public-key
+  fastify.get('/vapid-public-key', async (request, reply) => {
+    try {
+      const publicKey = pushService.getPublicKey();
+      return reply.code(200).send({
+        success: true,
+        publicKey
+      });
+    } catch (error) {
+      fastify.log.error('Fetch VAPID public key error:', error);
+      return reply.code(500).send({ success: false, message: 'Internal server error' });
+    }
+  });
+
+  // POST /api/notifications/subscribe
+  // Body: { "subscription": { ... } }
+  fastify.post('/subscribe', async (request, reply) => {
+    const { subscription } = request.body || {};
+
+    if (!subscription || !subscription.endpoint) {
+      return reply.code(400).send({
+        success: false,
+        message: 'subscription object with valid endpoint is required'
+      });
+    }
+
+    try {
+      // Upsert browser subscription data
+      const upsertQuery = `
+        INSERT INTO push_subscriptions (user_id, endpoint, subscription_data)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (endpoint) 
+        DO UPDATE SET 
+          user_id = EXCLUDED.user_id,
+          subscription_data = EXCLUDED.subscription_data
+        RETURNING id
+      `;
+      await db.query(upsertQuery, [
+        request.user.id,
+        subscription.endpoint,
+        JSON.stringify(subscription)
+      ]);
+
+      return reply.code(200).send({
+        success: true,
+        message: 'Push subscription saved successfully'
+      });
+
+    } catch (error) {
+      fastify.log.error('Save push subscription error:', error);
       return reply.code(500).send({
         success: false,
         message: 'Internal server error'

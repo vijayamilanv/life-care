@@ -2,6 +2,8 @@ const db = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { calculateDistance } = require('../utils/haversine');
 const { sendSMS } = require('../services/smsService');
+const { sendPushToUser } = require('../services/pushService');
+
 
 module.exports = async function (fastify, opts) {
 
@@ -62,6 +64,7 @@ module.exports = async function (fastify, opts) {
       const driversQuery = `
         SELECT 
           d.id AS driver_id,
+          u.id AS user_id,
           u.name AS driver_name,
           u.phone AS driver_phone,
           dl.latitude,
@@ -77,6 +80,7 @@ module.exports = async function (fastify, opts) {
         const dist = calculateDistance(userLat, userLng, parseFloat(driver.latitude), parseFloat(driver.longitude));
         return {
           driverId: driver.driver_id,
+          userId: driver.user_id,
           driverName: driver.driver_name,
           phone: driver.driver_phone,
           distanceKm: dist
@@ -96,6 +100,17 @@ module.exports = async function (fastify, opts) {
           console.error('[SMS Service] Failed to trigger dispatch SMS to driver:', err.message);
         });
       }
+
+      // Trigger web push notification alerts to all online drivers
+      driversRes.rows.forEach(driver => {
+        const dist = alertedDrivers.find(d => d.driverId === driver.driver_id)?.distanceKm || 0;
+        sendPushToUser(
+          driver.user_id,
+          'INCOMING EMERGENCY ALERT!',
+          `Accident Victim: ${requesterName} is ${dist} km away. Click to accept.`,
+          '/index.html'
+        ).catch(err => console.error('[Push Service] Driver alert push error:', err.message));
+      });
 
       // Notify available drivers in real-time via Socket.IO
       if (fastify.io) {
@@ -326,6 +341,14 @@ module.exports = async function (fastify, opts) {
             });
           }
 
+          // Send web push notification to user
+          sendPushToUser(
+            emergencyRequest.user_id,
+            'Ambulance Assigned',
+            `Driver ${driverInfo.driver_name} (${driverInfo.vehicle_number}) has accepted your request.`,
+            '/index.html'
+          ).catch(err => console.error('[Push Service] User assign push error:', err.message));
+
           // Audit Log
           await db.query(
             'INSERT INTO activity_logs (user_id, action, details) VALUES ($1, $2, $3)',
@@ -387,6 +410,14 @@ module.exports = async function (fastify, opts) {
           VALUES ($1, 'Ambulance Arrived', 'The driver has arrived at your location.')
         `, [emergencyRequest.user_id]);
 
+        // Send web push to user
+        sendPushToUser(
+          emergencyRequest.user_id,
+          'Ambulance Arrived',
+          'Your ambulance driver has arrived at the scene.',
+          '/index.html'
+        ).catch(err => console.error('[Push Service] User arrival push error:', err.message));
+
         // Socket notify
         if (fastify.io) {
           fastify.io.to(`user_${emergencyRequest.user_id}`).emit('status_update', {
@@ -439,6 +470,14 @@ module.exports = async function (fastify, opts) {
             INSERT INTO notifications (user_id, title, message)
             VALUES ($1, 'Trip Completed', 'Your emergency trip has been completed successfully.')
           `, [emergencyRequest.user_id]);
+
+          // Send web push to user
+          sendPushToUser(
+            emergencyRequest.user_id,
+            'Rescue Operation Completed',
+            'Your trip has completed successfully.',
+            '/index.html'
+          ).catch(err => console.error('[Push Service] User completion push error:', err.message));
 
           await client.query('COMMIT');
 

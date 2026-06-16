@@ -185,6 +185,9 @@ function loadSessionUser() {
     // Fetch alerts count / notifications
     refreshNotifications();
 
+    // Prompt and register Web Push Subscription
+    requestNotificationPermissionAndSubscribe();
+
     // Route to appropriate dashboard
     if (currentUser.role === 'driver') {
       showScreen('driverDashboard');
@@ -202,6 +205,85 @@ function loadSessionUser() {
     showScreen('landing');
   }
 }
+
+async function requestNotificationPermissionAndSubscribe() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('[Push Client] Web Push not supported by this browser.');
+    return;
+  }
+
+  try {
+    // Request permission if not already determined
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        console.log('[Push Client] Notification permission denied by user.');
+        return;
+      }
+    }
+
+    if (Notification.permission !== 'granted') return;
+
+    const reg = await navigator.serviceWorker.ready;
+    const existingSubscription = await reg.pushManager.getSubscription();
+
+    // If subscription already exists, we can still sync it to backend
+    if (existingSubscription) {
+      await registerSubscriptionOnBackend(existingSubscription);
+      return;
+    }
+
+    // Retrieve active VAPID public key from the backend API
+    const keyData = await apiFetch('/api/notifications/vapid-public-key');
+    if (!keyData || !keyData.publicKey) {
+      console.warn('[Push Client] Failed to retrieve VAPID public key from backend.');
+      return;
+    }
+
+    // Subscribe to push service
+    const applicationServerKey = urlBase64ToUint8Array(keyData.publicKey);
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey
+    });
+
+    await registerSubscriptionOnBackend(subscription);
+
+  } catch (error) {
+    console.error('[Push Client] Failed to register Web Push:', error.message);
+  }
+}
+
+async function registerSubscriptionOnBackend(subscription) {
+  try {
+    const res = await apiFetch('/api/notifications/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ subscription })
+    });
+    if (res.success) {
+      console.log('[Push Client] Web Push subscription registered successfully on Neon DB.');
+    }
+  } catch (err) {
+    console.error('[Push Client] Failed to sync subscription with server:', err.message);
+  }
+}
+
+// Helper utility to convert VAPID public key to Uint8Array format
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 
 // --- LOCATION TRACKING & GEO SERVICES ---
 function requestUserLocation() {

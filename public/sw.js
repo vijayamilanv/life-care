@@ -89,3 +89,57 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Listen for native Web Push notifications from server
+self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push Notification Event received.');
+  
+  let data = { title: 'Emergency Dispatch', body: 'New alert received' };
+  
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (err) {
+      data = { title: 'Emergency Alert', body: event.data.text() };
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    vibrate: [200, 100, 200, 100, 200],
+    data: {
+      url: data.url || '/'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+// Handle notification click (redirect to app tracking link)
+self.addEventListener('notificationclick', (event) => {
+  console.log('[Service Worker] Notification clicked.');
+  event.notification.close();
+
+  const redirectUrl = event.notification.data.url;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Check if there is already a window open, focus it
+      for (let i = 0; i < windowClients.length; i++) {
+        const client = windowClients[i];
+        if (client.url.includes(redirectUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // If no window is open, open a new tab
+      if (clients.openWindow) {
+        return clients.openWindow(redirectUrl);
+      }
+    })
+  );
+});
+
