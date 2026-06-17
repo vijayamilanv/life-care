@@ -604,17 +604,38 @@ async function initUserConsole() {
   userTrackingPanel.classList.add('hidden');
   trackingDriverDetails.classList.add('hidden');
   
-  // Set map user location marker coords
-  const userMarker = document.getElementById('user-map-marker');
-  userMarker.style.top = '50%';
-  userMarker.style.left = '50%';
-  
-  const driverMarker = document.getElementById('driver-map-marker');
-  driverMarker.classList.add('hidden');
+  // Set up interactive Leaflet GIS Map for Citizen
+  if (!window.leafletUserMap && typeof L !== 'undefined') {
+    const mapContainer = document.getElementById('user-map-container');
+    mapContainer.innerHTML = ''; // Clear simulated elements
+    window.leafletUserMap = L.map('user-map-container').setView([userCoords.latitude, userCoords.longitude], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(window.leafletUserMap);
 
-  const userRadar = document.getElementById('user-radar-ring');
-  userRadar.style.top = '50%';
-  userRadar.style.left = '50%';
+    window.leafletUserMarker = L.marker([userCoords.latitude, userCoords.longitude], {
+      icon: L.divIcon({
+        className: 'custom-map-icon user-icon',
+        html: '<i class="fa-solid fa-person-falling-burst" style="color:var(--status-danger); font-size:24px;"></i>',
+        iconSize: [24, 24]
+      })
+    }).addTo(window.leafletUserMap).bindPopup('Accident Site').openPopup();
+  } else if (window.leafletUserMap) {
+    window.leafletUserMap.setView([userCoords.latitude, userCoords.longitude], 14);
+    if (window.leafletUserMarker) {
+      window.leafletUserMarker.setLatLng([userCoords.latitude, userCoords.longitude]);
+    }
+    
+    // Clean up active tracking layers
+    if (window.leafletDriverMarker) {
+      window.leafletUserMap.removeLayer(window.leafletDriverMarker);
+      window.leafletDriverMarker = null;
+    }
+    if (window.leafletUserRoute) {
+      window.leafletUserMap.removeLayer(window.leafletUserRoute);
+      window.leafletUserRoute = null;
+    }
+  }
 
   // Fetch nearby available ambulances
   fetchNearbyAmbulances();
@@ -832,26 +853,36 @@ function handleRequestStateChange(request) {
 }
 
 function updateDriverMarkerOnSimulatedMap(drvLat, drvLng) {
-  const driverMarkerEl = document.getElementById('driver-map-marker');
-  driverMarkerEl.classList.remove('hidden');
-  document.getElementById('driver-marker-label').textContent = activeRequest.vehicleNumber;
-
-  // Since we have userCoords and driverCoords, we can dynamically position the driver relative to user (center 50%, 50%)
-  // We compute delta and map coordinates
-  const latDelta = drvLat - userCoords.latitude;
-  const lngDelta = drvLng - userCoords.longitude;
-
-  // Scale factor to map degree delta to percentage (let's say 0.01 degree = 30% width)
-  const scale = 3000; 
-  const topPercent = 50 - (latDelta * scale);
-  const leftPercent = 50 + (lngDelta * scale);
-
-  // Keep it within map boundaries
-  const boundedTop = Math.max(5, Math.min(95, topPercent));
-  const boundedLeft = Math.max(5, Math.min(95, leftPercent));
-
-  driverMarkerEl.style.top = `${boundedTop}%`;
-  driverMarkerEl.style.left = `${boundedLeft}%`;
+  if (window.leafletUserMap && window.leafletUserMarker) {
+    const drvPos = [parseFloat(drvLat), parseFloat(drvLng)];
+    const usrPos = [userCoords.latitude, userCoords.longitude];
+    
+    if (!window.leafletDriverMarker) {
+      window.leafletDriverMarker = L.marker(drvPos, {
+        icon: L.divIcon({
+          className: 'custom-map-icon driver-icon',
+          html: '<i class="fa-solid fa-truck-medical" style="color:var(--accent-cyan); font-size:24px;"></i>',
+          iconSize: [24, 24]
+        })
+      }).addTo(window.leafletUserMap).bindPopup(`Ambulance: ${activeRequest.vehicleNumber}`).openPopup();
+    } else {
+      window.leafletDriverMarker.setLatLng(drvPos);
+    }
+    
+    if (!window.leafletUserRoute) {
+      window.leafletUserRoute = L.polyline([drvPos, usrPos], {
+        color: 'var(--accent-cyan)',
+        weight: 4,
+        opacity: 0.8,
+        dashArray: '5, 10'
+      }).addTo(window.leafletUserMap);
+    } else {
+      window.leafletUserRoute.setLatLngs([drvPos, usrPos]);
+    }
+    
+    const group = new L.featureGroup([window.leafletUserMarker, window.leafletDriverMarker]);
+    window.leafletUserMap.fitBounds(group.getBounds().pad(0.15));
+  }
 }
 
 // --- DRIVER CONSOLE OPERATIONS ---
@@ -860,6 +891,39 @@ async function initDriverConsole() {
   driverEmptyPanel.classList.remove('hidden');
   driverActivePanel.classList.add('hidden');
   
+  // Set up interactive Leaflet GIS Map for Driver
+  if (!window.leafletDriverMap && typeof L !== 'undefined') {
+    const mapContainer = document.getElementById('driver-map-container');
+    mapContainer.innerHTML = ''; // Clear simulated elements
+    window.leafletDriverMap = L.map('driver-map-container').setView([userCoords.latitude, userCoords.longitude], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(window.leafletDriverMap);
+
+    window.leafletDriverSelfMarker = L.marker([userCoords.latitude, userCoords.longitude], {
+      icon: L.divIcon({
+        className: 'custom-map-icon driver-icon',
+        html: '<i class="fa-solid fa-truck-medical" style="color:var(--accent-cyan); font-size:24px;"></i>',
+        iconSize: [24, 24]
+      })
+    }).addTo(window.leafletDriverMap).bindPopup('My Location').openPopup();
+  } else if (window.leafletDriverMap) {
+    window.leafletDriverMap.setView([userCoords.latitude, userCoords.longitude], 14);
+    if (window.leafletDriverSelfMarker) {
+      window.leafletDriverSelfMarker.setLatLng([userCoords.latitude, userCoords.longitude]);
+    }
+    
+    // Clean up active mission elements
+    if (window.leafletDriverTargetMarker) {
+      window.leafletDriverMap.removeLayer(window.leafletDriverTargetMarker);
+      window.leafletDriverTargetMarker = null;
+    }
+    if (window.leafletDriverRoute) {
+      window.leafletDriverMap.removeLayer(window.leafletDriverRoute);
+      window.leafletDriverRoute = null;
+    }
+  }
+
   // Set default state of toggler based on profile available flag
   const isAvailable = currentUser.isAvailable;
   driverAvailabilityToggle.checked = !!isAvailable;
@@ -1049,9 +1113,37 @@ async function enterActiveMissionConsole(requestId) {
       driverArriveBtn.classList.remove('hidden');
       driverCompleteBtn.classList.add('hidden');
 
-      // Update map display target
-      const targetMarker = document.getElementById('driver-target-marker');
-      targetMarker.classList.remove('hidden');
+      // Update Leaflet target marker and route line
+      if (window.leafletDriverMap) {
+        const usrPos = [parseFloat(activeRequest.userLatitude), parseFloat(activeRequest.userLongitude)];
+        const drvPos = [userCoords.latitude, userCoords.longitude];
+        
+        if (!window.leafletDriverTargetMarker) {
+          window.leafletDriverTargetMarker = L.marker(usrPos, {
+            icon: L.divIcon({
+              className: 'custom-map-icon user-icon',
+              html: '<i class="fa-solid fa-person-falling-burst" style="color:var(--status-danger); font-size:24px;"></i>',
+              iconSize: [24, 24]
+            })
+          }).addTo(window.leafletDriverMap).bindPopup('Accident Site').openPopup();
+        } else {
+          window.leafletDriverTargetMarker.setLatLng(usrPos);
+        }
+        
+        if (!window.leafletDriverRoute) {
+          window.leafletDriverRoute = L.polyline([drvPos, usrPos], {
+            color: 'var(--status-danger)',
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '5, 10'
+          }).addTo(window.leafletDriverMap);
+        } else {
+          window.leafletDriverRoute.setLatLngs([drvPos, usrPos]);
+        }
+        
+        const group = new L.featureGroup([window.leafletDriverSelfMarker, window.leafletDriverTargetMarker]);
+        window.leafletDriverMap.fitBounds(group.getBounds().pad(0.15));
+      }
       
       // Simulate real-time driver movement towards destination (for interactive presentation testing)
       simulateDriverMovementToDestination();
@@ -1088,6 +1180,15 @@ function simulateDriverMovementToDestination() {
     // Update local state coordinates
     userCoords.latitude = latDrift;
     userCoords.longitude = lngDrift;
+    
+    // Update Leaflet layers
+    if (window.leafletDriverMap && window.leafletDriverSelfMarker) {
+      const drvPos = [latDrift, lngDrift];
+      window.leafletDriverSelfMarker.setLatLng(drvPos);
+      if (window.leafletDriverRoute) {
+        window.leafletDriverRoute.setLatLngs([drvPos, [destLat, destLng]]);
+      }
+    }
     
     // Broadcast updated coordinates
     streamDriverLocationSocket();

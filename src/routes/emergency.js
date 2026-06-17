@@ -136,6 +136,49 @@ module.exports = async function (fastify, opts) {
         ).catch(err => console.error('[Push Service] Driver alert push error:', err.message));
       });
 
+      // 1. Hospital Recommendation Engine (Capacity & Proximity Scoring)
+      let recommendedHospital = null;
+      try {
+        const hospitalsRes = await db.query(`
+          SELECT h.id, h.name, h.latitude, h.longitude, h.contact_number, h.address,
+                 c.total_beds, c.available_beds, c.total_icu_beds, c.available_icu_beds
+          FROM hospitals h
+          LEFT JOIN hospital_capacity c ON h.id = c.hospital_id
+        `);
+        
+        if (hospitalsRes.rows.length > 0) {
+          const sortedHospitals = hospitalsRes.rows.map(h => {
+            const dist = calculateDistance(userLat, userLng, parseFloat(h.latitude), parseFloat(h.longitude));
+            const availICU = parseInt(h.available_icu_beds || 0);
+            const availBeds = parseInt(h.available_beds || 0);
+            // Lower score is better (closer distance, higher ICU and bed availability)
+            const score = (dist * 0.4) - (availICU * 1.5) - (availBeds * 0.2);
+            return { ...h, distanceKm: dist, score };
+          }).sort((a, b) => a.score - b.score);
+          
+          recommendedHospital = sortedHospitals[0];
+          
+          // Log alert to hospital
+          const etaMinutes = Math.round((recommendedHospital.distanceKm / 40) * 60) + 5;
+          await db.query(`
+            INSERT INTO hospital_alerts (hospital_id, request_id, eta_minutes, severity, status)
+            VALUES ($1, $2, $3, 'critical', 'pending')
+          `, [recommendedHospital.id, emergencyRequest.id, etaMinutes]);
+        }
+      } catch (hErr) {
+        console.error('[Hospital Recommendation] Failed:', hErr.message);
+      }
+
+      // 2. Police Coordination Alert
+      try {
+        await db.query(`
+          INSERT INTO police_alerts (request_id, badge_number, status)
+          VALUES ($1, 'HQ-DISPATCH-MAIN', 'dispatched')
+        `, [emergencyRequest.id]);
+      } catch (pErr) {
+        console.error('[Police Alert] Failed:', pErr.message);
+      }
+
       // Notify available drivers in real-time via Socket.IO
       if (fastify.io) {
         // We broadcast the alert to the 'available_drivers' room.
@@ -150,7 +193,8 @@ module.exports = async function (fastify, opts) {
 
       return reply.code(201).send({
         success: true,
-        request: emergencyRequest
+        request: emergencyRequest,
+        recommendedHospital
       });
 
     } catch (error) {
@@ -329,6 +373,12 @@ module.exports = async function (fastify, opts) {
             VALUES ($1, 'Ambulance Assigned', 'A driver has accepted your emergency request and is heading to your location.')
           `, [emergencyRequest.user_id]);
 
+          // Log status history transition
+          await client.query(`
+            INSERT INTO request_status_history (request_id, status)
+            VALUES ($1, 'accepted')
+          `, [id]);
+
           await client.query('COMMIT');
 
           // Retrieve updated driver information to send to user
@@ -435,6 +485,12 @@ module.exports = async function (fastify, opts) {
           VALUES ($1, 'Ambulance Arrived', 'The driver has arrived at your location.')
         `, [emergencyRequest.user_id]);
 
+        // Log status history transition
+        await db.query(`
+          INSERT INTO request_status_history (request_id, status)
+          VALUES ($1, 'arrived')
+        `, [id]);
+
         // Send web push to user
         sendPushToUser(
           emergencyRequest.user_id,
@@ -495,6 +551,12 @@ module.exports = async function (fastify, opts) {
             INSERT INTO notifications (user_id, title, message)
             VALUES ($1, 'Trip Completed', 'Your emergency trip has been completed successfully.')
           `, [emergencyRequest.user_id]);
+
+          // Log status history transition
+          await client.query(`
+            INSERT INTO request_status_history (request_id, status)
+            VALUES ($1, 'completed')
+          `, [id]);
 
           // Send web push to user
           sendPushToUser(

@@ -18,7 +18,46 @@ async function checkAndEscalateRequests(fastify) {
     for (const request of pendingRequestsRes.rows) {
       const elapsedSeconds = Math.round((now - new Date(request.created_at)) / 1000);
       
-      if (elapsedSeconds >= 60 && request.escalation_step < 3) {
+      if (elapsedSeconds >= 90 && request.escalation_step < 4) {
+        // T+90s: Escalation Level 4 -> Highest Emergency Priority Dispatch
+        console.log(`[Escalation Engine] Request ${request.id} pending for ${elapsedSeconds}s. Raising System Priority to Level 4.`);
+        
+        await db.query(`
+          UPDATE emergency_requests 
+          SET escalation_step = 4, escalated_at = CURRENT_TIMESTAMP 
+          WHERE id = $1
+        `, [request.id]);
+        
+        await db.query(`
+          INSERT INTO activity_logs (user_id, action, details) 
+          VALUES ($1, 'ESCALATION_PRIORITY', $2)
+        `, [request.user_id, `Emergency request ${request.id} elevated to Priority Level 4 due to no acceptance within 90 seconds`]);
+        
+        await db.query(`
+          INSERT INTO notifications (user_id, title, message)
+          VALUES ($1, 'Priority Escalated', 'System response priority raised to maximum. Rerouting all resources.')
+        `, [request.user_id]);
+        
+        sendPushToUser(
+          request.user_id,
+          'Critical System Alert',
+          'Your emergency request is elevated to priority level.',
+          '/index.html'
+        ).catch(err => console.error('[Push Service] Priority push error:', err.message));
+        
+        if (fastify && fastify.io) {
+          fastify.io.to(`user_${request.user_id}`).emit('status_update', {
+            requestId: request.id,
+            status: 'pending',
+            escalation_step: 4
+          });
+          fastify.io.to('available_drivers').emit('priority_escalation', {
+            requestId: request.id,
+            elapsedSeconds
+          });
+        }
+      } 
+      else if (elapsedSeconds >= 60 && request.escalation_step < 3) {
         // T+60s: Escalation Level 3 -> Emergency Control Center
         console.log(`[Escalation Engine] Request ${request.id} pending for ${elapsedSeconds}s. Escalating to ECC (Step 3).`);
         

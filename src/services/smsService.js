@@ -1,4 +1,28 @@
 require('dotenv').config();
+const db = require('../config/db');
+
+async function logSMSToDB(phone, message, status, sid) {
+  try {
+    await db.query(
+      'INSERT INTO sms_logs (recipient_phone, message, status, sid) VALUES ($1, $2, $3, $4)',
+      [phone, message, status, sid]
+    );
+  } catch (err) {
+    console.error('[SMS Service] Failed to write SMS log to DB:', err.message);
+  }
+}
+
+async function logCallToDB(phone, content, status, sid) {
+  try {
+    await db.query(
+      'INSERT INTO call_logs (recipient_phone, voice_content, status, sid) VALUES ($1, $2, $3, $4)',
+      [phone, content, status, sid]
+    );
+  } catch (err) {
+    console.error('[SMS Service] Failed to write Call log to DB:', err.message);
+  }
+}
+
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -38,14 +62,18 @@ async function sendSMS(to, body) {
         to
       });
       console.log(`[SMS Service] SMS sent successfully. Twilio Message SID: ${message.sid}`);
+      await logSMSToDB(to, body, 'success', message.sid);
       return { success: true, sid: message.sid, provider: 'twilio' };
     } catch (error) {
       console.error(`[SMS Service] Twilio send failed to ${to}:`, error.message);
+      await logSMSToDB(to, body, 'failed', null);
       // Fallback to mock on error to keep the workflow operational
       return sendMockSMS(to, body, error.message);
     }
   } else {
-    return sendMockSMS(to, body);
+    const res = await sendMockSMS(to, body);
+    await logSMSToDB(to, body, 'success', res.sid);
+    return res;
   }
 }
 
@@ -86,13 +114,17 @@ async function triggerVoiceCall(to, message) {
         from: fromNumber
       });
       console.log(`[Voice Service] Voice call placed. Twilio Call SID: ${call.sid}`);
+      await logCallToDB(to, message, 'success', call.sid);
       return { success: true, sid: call.sid, provider: 'twilio' };
     } catch (error) {
       console.error(`[Voice Service] Twilio voice call failed to ${to}:`, error.message);
+      await logCallToDB(to, message, 'failed', null);
       return triggerMockVoiceCall(to, message, error.message);
     }
   } else {
-    return triggerMockVoiceCall(to, message);
+    const res = await triggerMockVoiceCall(to, message);
+    await logCallToDB(to, message, 'success', res.sid);
+    return res;
   }
 }
 

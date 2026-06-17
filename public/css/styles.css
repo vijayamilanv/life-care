@@ -916,3 +916,28 @@ input:checked + .slider:before {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Leaflet GIS Map Styling Override */
+.leaflet-container {
+  background-color: #0b1329 !important;
+  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+}
+.leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); /* Sleek cyberpunk dark mode map tile filter */
+}
+.custom-map-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent;
+  border: none;
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: rgba(11, 19, 41, 0.95) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-light) !important;
+  backdrop-filter: blur(5px);
+  border-radius: 8px;
+}
+
