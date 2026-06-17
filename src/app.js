@@ -41,6 +41,12 @@ fastify.get('/health', async (request, reply) => {
   return { status: 'healthy', timestamp: new Date().toISOString() };
 });
 
+// Register clean shutdown handler to clear background intervals
+fastify.addHook('onClose', async (instance) => {
+  const { stopEscalationEngine } = require('./services/escalationEngine');
+  stopEscalationEngine();
+});
+
 // Bind sockets when fastify is ready
 fastify.ready(err => {
   if (err) {
@@ -53,6 +59,10 @@ fastify.ready(err => {
   // Attach WebSocket connection handlers
   const socketHandler = require('./sockets/socketHandler');
   socketHandler(fastify.io);
+
+  // Initialize active dispatches timeout escalation scheduler
+  const { startEscalationEngine } = require('./services/escalationEngine');
+  startEscalationEngine(fastify);
 });
 
 // Start server

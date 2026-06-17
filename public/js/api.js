@@ -97,10 +97,10 @@ const DriverAPI = {
 
 // Emergency Workflow APIs
 const EmergencyAPI = {
-  createRequest: async (latitude, longitude) => {
+  createRequest: async (latitude, longitude, requestUuid = null) => {
     return apiFetch('/api/emergency/request', {
       method: 'POST',
-      body: JSON.stringify({ latitude, longitude })
+      body: JSON.stringify({ latitude, longitude, request_uuid: requestUuid })
     });
   },
   

@@ -21,7 +21,7 @@ module.exports = async function (fastify, opts) {
       });
     }
 
-    const { latitude, longitude } = request.body || {};
+    const { latitude, longitude, request_uuid } = request.body || {};
     if (latitude === undefined || longitude === undefined) {
       return reply.code(400).send({
         success: false,
@@ -40,13 +40,37 @@ module.exports = async function (fastify, opts) {
     }
 
     try {
+      // Deduplicate request if request_uuid is provided
+      if (request_uuid) {
+        const existingRes = await db.query(
+          'SELECT id, user_id, user_latitude, user_longitude, status, created_at, request_uuid FROM emergency_requests WHERE request_uuid = $1',
+          [request_uuid]
+        );
+        if (existingRes.rows.length > 0) {
+          const existingRequest = existingRes.rows[0];
+          return reply.code(200).send({
+            success: true,
+            request: {
+              id: existingRequest.id,
+              userId: existingRequest.user_id,
+              userLatitude: parseFloat(existingRequest.user_latitude),
+              userLongitude: parseFloat(existingRequest.user_longitude),
+              status: existingRequest.status,
+              createdAt: existingRequest.created_at,
+              requestUuid: existingRequest.request_uuid
+            },
+            message: 'Request already exists (deduplicated)'
+          });
+        }
+      }
+
       // Create emergency request in DB
       const insertQuery = `
-        INSERT INTO emergency_requests (user_id, user_latitude, user_longitude, status)
-        VALUES ($1, $2, $3, 'pending')
-        RETURNING id, user_id, user_latitude, user_longitude, status, created_at
+        INSERT INTO emergency_requests (user_id, user_latitude, user_longitude, status, request_uuid)
+        VALUES ($1, $2, $3, 'pending', $4)
+        RETURNING id, user_id, user_latitude, user_longitude, status, created_at, request_uuid
       `;
-      const res = await db.query(insertQuery, [request.user.id, userLat, userLng]);
+      const res = await db.query(insertQuery, [request.user.id, userLat, userLng, request_uuid || null]);
       const emergencyRequest = res.rows[0];
 
       // Audit Log
@@ -130,6 +154,7 @@ module.exports = async function (fastify, opts) {
       });
 
     } catch (error) {
+      console.error('Create emergency request error:', error);
       fastify.log.error('Create emergency request error:', error);
       return reply.code(500).send({
         success: false,

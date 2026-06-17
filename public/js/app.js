@@ -147,6 +147,8 @@ function handleNetworkStateChange() {
       // Reset onclick override
       triggerEmergencyBtn.onclick = null;
     }
+    // Restored connection: process sync queue
+    syncOfflineQueuedData();
   } else {
     if (offlineBanner) {
       offlineBanner.classList.remove('hidden');
@@ -162,6 +164,57 @@ function handleNetworkStateChange() {
         window.location.href = 'tel:102';
       };
     }
+  }
+}
+
+async function syncOfflineQueuedData() {
+  console.log('[Sync Engine] Restored network connection. Processing offline queues...');
+  
+  // 1. Sync pending requests in outbox
+  try {
+    const outboxItems = await getOutboxItems();
+    for (const item of outboxItems) {
+      console.log(`[Sync Engine] Syncing queued request: ${item.id}`);
+      try {
+        const response = await EmergencyAPI.createRequest(item.latitude, item.longitude, item.id);
+        if (response.success) {
+          console.log(`[Sync Engine] Queued request synchronized: ${item.id}`);
+          await deleteFromOutbox(item.id);
+          
+          // If this was the user's active request, load tracking console
+          if (currentUser && currentUser.role === 'user' && !activeRequest) {
+            activeRequest = response.request;
+            userRequestPanel.classList.add('hidden');
+            userTrackingPanel.classList.remove('hidden');
+            trackingStatusTitle.textContent = 'Locating Ambulance...';
+            pollRequestDetails(activeRequest.id);
+          }
+        }
+      } catch (err) {
+        console.error(`[Sync Engine] Failed to sync request ${item.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Sync Engine] Error reading IndexedDB outbox:', err.message);
+  }
+
+  // 2. Sync queued GPS coordinates
+  try {
+    const gpsCoords = await getCachedGPSCoordinates();
+    if (gpsCoords.length > 0) {
+      console.log(`[Sync Engine] Syncing ${gpsCoords.length} buffered GPS coordinates...`);
+      for (const coord of gpsCoords) {
+        try {
+          await DriverAPI.updateLocation(coord.latitude, coord.longitude);
+        } catch (err) {
+          console.warn('[Sync Engine] Failed syncing GPS step:', err.message);
+        }
+      }
+      await clearCachedGPSCoordinates();
+      console.log('[Sync Engine] Buffered coordinates synchronized and cleared.');
+    }
+  } catch (err) {
+    console.error('[Sync Engine] Error processing GPS queue:', err.message);
   }
 }
 
@@ -572,18 +625,31 @@ async function initUserConsole() {
 }
 
 async function fetchNearbyAmbulances() {
+  // If device is offline, load nearby ambulances from local IndexedDB cache
+  if (!navigator.onLine) {
+    try {
+      const cachedDrivers = await getCachedDrivers();
+      renderNearbyAmbulances(cachedDrivers, true);
+    } catch (err) {
+      console.error('[Offline Cache] Failed to load cached drivers:', err.message);
+    }
+    return;
+  }
+
   try {
     const data = await UserAPI.getNearbyAmbulances(userCoords.latitude, userCoords.longitude);
     if (data.success) {
-      renderNearbyAmbulances(data.ambulances);
+      renderNearbyAmbulances(data.ambulances, false);
+      // Cache driver listings locally
+      await cacheDrivers(data.ambulances);
     }
   } catch (err) {
     console.error('Error fetching nearby ambulances:', err.message);
   }
 }
 
-function renderNearbyAmbulances(ambulances) {
-  nearbyCountBadge.textContent = `${ambulances.length} Online`;
+function renderNearbyAmbulances(ambulances, isCached = false) {
+  nearbyCountBadge.textContent = isCached ? 'Cached (Offline)' : `${ambulances.length} Online`;
   
   if (ambulances.length === 0) {
     nearbyAmbulancesList.innerHTML = `
@@ -592,30 +658,67 @@ function renderNearbyAmbulances(ambulances) {
     return;
   }
 
-  nearbyAmbulancesList.innerHTML = ambulances.map(amb => `
-    <div class="list-item">
-      <div class="list-item-header">
-        <div>
-          <div class="list-item-title">${amb.driverName}</div>
-          <div class="list-item-subtitle">Plate: ${amb.vehicleNumber}</div>
+  nearbyAmbulancesList.innerHTML = ambulances.map(amb => {
+    let lastSeenText = '';
+    if (isCached && amb.lastSeenTimestamp) {
+      const diffMs = new Date() - new Date(amb.lastSeenTimestamp);
+      const diffMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
+      lastSeenText = ` <span style="font-size:0.75rem; color:var(--status-danger); font-weight:600;">(Last seen ${diffMins}m ago)</span>`;
+    }
+
+    return `
+      <div class="list-item">
+        <div class="list-item-header">
+          <div>
+            <div class="list-item-title">${amb.driverName}${lastSeenText}</div>
+            <div class="list-item-subtitle">Plate: ${amb.vehicleNumber}</div>
+          </div>
+          <span class="list-item-badge cyan">${amb.ambulanceType}</span>
         </div>
-        <span class="list-item-badge cyan">${amb.ambulanceType}</span>
+        <div style="display: flex; justify-content: space-between; font-size: 0.825rem; margin-top: 0.25rem;">
+          <span class="text-secondary-color"><i class="fa-solid fa-location-arrow text-cyan"></i> Proximity:</span>
+          <strong>${amb.distanceKm} km</strong>
+        </div>
       </div>
-      <div style="display: flex; justify-content: space-between; font-size: 0.825rem; margin-top: 0.25rem;">
-        <span class="text-secondary-color"><i class="fa-solid fa-location-arrow text-cyan"></i> Proximity:</span>
-        <strong>${amb.distanceKm} km</strong>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 async function triggerEmergencyDispatch() {
+  // Generate a cryptographically secure UUID for deduplication
+  const localUuid = self.crypto.randomUUID ? self.crypto.randomUUID() : 'req-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+
   try {
     // Lock buttons
     triggerEmergencyBtn.disabled = true;
     triggerEmergencyBtn.textContent = 'PLACING REQUEST...';
 
-    const response = await EmergencyAPI.createRequest(userCoords.latitude, userCoords.longitude);
+    // If device is offline, queue request locally in IndexedDB outbox
+    if (!navigator.onLine) {
+      const requestPayload = {
+        id: localUuid,
+        latitude: userCoords.latitude,
+        longitude: userCoords.longitude,
+        createdAt: new Date().toISOString()
+      };
+
+      await addToOutbox(requestPayload);
+
+      alert('No internet connection. Your emergency request has been queued locally and will sync automatically once your signal returns.');
+
+      // Show offline queued interface
+      userRequestPanel.classList.add('hidden');
+      userTrackingPanel.classList.remove('hidden');
+      trackingStatusTitle.textContent = 'Queued (Offline)';
+      trackingStatusDesc.textContent = 'Your emergency call is saved locally. We are trying to restore connectivity...';
+      trackingDriverDetails.classList.add('hidden');
+      
+      triggerEmergencyBtn.disabled = false;
+      triggerEmergencyBtn.textContent = 'DISPATCH NOW';
+      return;
+    }
+
+    const response = await EmergencyAPI.createRequest(userCoords.latitude, userCoords.longitude, localUuid);
     
     if (response.success) {
       activeRequest = response.request;
@@ -832,14 +935,33 @@ function stopDriverLocationTracking() {
 }
 
 async function streamDriverLocationAPI() {
+  // If device is offline, cache coordinates in local GPS buffer
+  if (!navigator.onLine) {
+    try {
+      await cacheGPSCoordinates(userCoords.latitude, userCoords.longitude);
+      console.log('[GPS Cache] Connection offline. Buffered current GPS coordinates.');
+    } catch (err) {
+      console.error('[GPS Cache] Failed to cache coordinates offline:', err.message);
+    }
+    return;
+  }
+
   try {
     await DriverAPI.updateLocation(userCoords.latitude, userCoords.longitude);
   } catch (err) {
-    console.error('API location update error:', err.message);
+    console.error('API location update error, falling back to cache:', err.message);
+    try {
+      await cacheGPSCoordinates(userCoords.latitude, userCoords.longitude);
+    } catch (dbErr) {
+      console.error('[GPS Cache] Fallback caching failed:', dbErr.message);
+    }
   }
 }
 
 function streamDriverLocationSocket() {
+  // Socket connections are suspended during signal drops
+  if (!navigator.onLine) return;
+
   const socket = getSocket();
   if (socket && currentUser && currentUser.driverId) {
     socket.emit('driver_location_update', {
