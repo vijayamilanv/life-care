@@ -71,6 +71,9 @@
           <button class="btn btn-secondary" id="landing-login-btn">
             <i class="fa-solid fa-user-doctor"></i> Driver Portal
           </button>
+          <button class="btn btn-secondary" id="landing-ecc-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">
+            <i class="fa-solid fa-tower-broadcast"></i> National Control Center
+          </button>
         </div>
       </div>
 
@@ -110,6 +113,7 @@
         <div class="role-selector">
           <button class="role-btn active" id="role-select-user">Citizen Portal</button>
           <button class="role-btn" id="role-select-driver">Driver Portal</button>
+          <button class="role-btn" id="role-select-ecc">ECC Command</button>
         </div>
 
         <form id="auth-form">
@@ -376,6 +380,161 @@
         </div>
       </div>
     </section>
+
+    <!-- SCREEN 5: NATIONAL CONTROL CENTER (ECC) -->
+    <section class="screen" id="screen-ecc-dashboard">
+      <div class="driver-controls mb-3" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h3>Emergency Control Center (ECC) Console</h3>
+          <p class="text-secondary-color mt-1">National Command & Incident Coordination Dashboard</p>
+        </div>
+        <div class="tab-selectors" style="display:flex; gap:0.5rem;">
+          <button class="role-btn active" id="ecc-tab-btn-map" onclick="switchECCTab('map')">Map Monitor</button>
+          <button class="role-btn" id="ecc-tab-btn-hospitals" onclick="switchECCTab('hospitals')">Hospitals Bed Manager</button>
+          <button class="role-btn" id="ecc-tab-btn-police" onclick="switchECCTab('police')">Police Alerts Feed</button>
+          <button class="role-btn" id="ecc-tab-btn-logs" onclick="switchECCTab('logs')">Twilio Gateways Logs</button>
+        </div>
+      </div>
+
+      <!-- TAB 1: MAP MONITOR -->
+      <div class="ecc-tab-content active" id="ecc-tab-map">
+        <div class="dashboard-grid">
+          <!-- Google Map Panel -->
+          <div class="glass-card map-panel" style="height: 520px;">
+            <div class="map-header">
+              <div class="map-title">
+                <i class="fa-solid fa-earth-asia text-cyan"></i>
+                <span>Live National Incident Map</span>
+              </div>
+              <span class="user-badge" id="ecc-map-status">Tracking Live Telemetry</span>
+            </div>
+            <div class="map-container" id="ecc-map-container">
+              <div class="map-visual-placeholder">Initializing map grid...</div>
+            </div>
+          </div>
+
+          <!-- Escalation / Priority Sidebar -->
+          <div class="side-panel">
+            <div class="glass-card">
+              <h3>Priority Escalation Tracker</h3>
+              <p class="text-secondary-color mt-1 mb-2">Unassigned dispatches automatically escalates through T+20s/40s/60s/90s steps.</p>
+              <div class="list-items" id="ecc-escalation-list" style="max-height: 400px; overflow-y: auto;">
+                <div style="text-align: center; color: var(--text-muted); padding: 1.5rem 0;">No active emergency dispatches</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: HOSPITALS BED MANAGER -->
+      <div class="ecc-tab-content hidden" id="ecc-tab-hospitals">
+        <div class="glass-card">
+          <div class="list-header">
+            <h3>Connected National Hospitals & Trauma Centers</h3>
+            <span class="list-item-badge cyan" id="ecc-hospital-count">0 Connected</span>
+          </div>
+          <div style="overflow-x: auto; margin-top: 1rem;">
+            <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-light); color: var(--text-cyan);">
+                  <th style="padding: 0.75rem;">Hospital Name</th>
+                  <th style="padding: 0.75rem;">Address</th>
+                  <th style="padding: 0.75rem;">Ward Beds (Avail/Total)</th>
+                  <th style="padding: 0.75rem;">ICU Beds (Avail/Total)</th>
+                  <th style="padding: 0.75rem; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ecc-hospitals-table-body">
+                <tr>
+                  <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading hospital capacity metrics...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: POLICE ALERTS FEED -->
+      <div class="ecc-tab-content hidden" id="ecc-tab-police">
+        <div class="glass-card">
+          <h3>Police Dispatch Alerts Feed</h3>
+          <p class="text-secondary-color mt-1 mb-3">Logs of active notifications automatically routed to Police HQ units.</p>
+          <div style="overflow-x: auto;">
+            <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-light); color: var(--text-cyan);">
+                  <th style="padding: 0.75rem;">Alert ID</th>
+                  <th style="padding: 0.75rem;">Request ID</th>
+                  <th style="padding: 0.75rem;">Victim Name</th>
+                  <th style="padding: 0.75rem;">Assigned Unit</th>
+                  <th style="padding: 0.75rem;">Status</th>
+                  <th style="padding: 0.75rem;">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="ecc-police-table-body">
+                <tr>
+                  <td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">No police dispatches logged</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: TWILIO GATEWAYS LOGS -->
+      <div class="ecc-tab-content hidden" id="ecc-tab-logs">
+        <div class="glass-card">
+          <h3>Twilio SMS & IVR Call Auditing Logs</h3>
+          <p class="text-secondary-color mt-1 mb-3">Real-time log of communication dispatches triggered by the escalation engine.</p>
+          <div style="overflow-x: auto;">
+            <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-light); color: var(--text-cyan);">
+                  <th style="padding: 0.75rem;">Type</th>
+                  <th style="padding: 0.75rem;">Recipient Phone</th>
+                  <th style="padding: 0.75rem;">Dispatch Content</th>
+                  <th style="padding: 0.75rem;">Status</th>
+                  <th style="padding: 0.75rem;">Sent At</th>
+                </tr>
+              </thead>
+              <tbody id="ecc-logs-table-body">
+                <tr>
+                  <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">No gateway transmissions recorded</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOSPITAL CAPACITY EDITOR MODAL -->
+    <div class="modal hidden" id="capacity-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000;">
+      <div class="glass-card" style="width: 400px; padding: 2rem; border-color: var(--accent-cyan); background: rgba(11, 19, 41, 0.95); margin: auto;">
+        <h3 class="mb-3" id="modal-hospital-name">Edit Hospital Capacity</h3>
+        <input type="hidden" id="modal-hospital-id">
+        <div class="form-group mb-2">
+          <label style="font-size:0.85rem; color:var(--text-cyan);">Total Ward Beds</label>
+          <input type="number" class="form-control" id="modal-total-beds" min="0">
+        </div>
+        <div class="form-group mb-2">
+          <label style="font-size:0.85rem; color:var(--text-cyan);">Available Ward Beds</label>
+          <input type="number" class="form-control" id="modal-avail-beds" min="0">
+        </div>
+        <div class="form-group mb-2">
+          <label style="font-size:0.85rem; color:var(--text-cyan);">Total ICU Beds</label>
+          <input type="number" class="form-control" id="modal-total-icu" min="0">
+        </div>
+        <div class="form-group mb-3">
+          <label style="font-size:0.85rem; color:var(--text-cyan);">Available ICU Beds</label>
+          <input type="number" class="form-control" id="modal-avail-icu" min="0">
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:1.5rem;">
+          <button class="btn btn-secondary" style="flex:1;" id="modal-close-btn">Cancel</button>
+          <button class="btn btn-primary" style="flex:1;" id="modal-save-btn">Save Changes</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- Sound Alert for Driver -->

@@ -132,3 +132,37 @@ const NotificationAPI = {
     });
   }
 };
+
+// National ECC API bindings
+const NationalAPI = {
+  getHospitals: async () => {
+    return apiFetch('/api/national/hospitals', {
+      method: 'GET'
+    });
+  },
+  
+  updateHospitalCapacity: async (hospitalId, payload) => {
+    return apiFetch(`/api/national/hospital/capacity/${hospitalId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  },
+  
+  getPoliceAlerts: async () => {
+    return apiFetch('/api/national/police-alerts', {
+      method: 'GET'
+    });
+  },
+  
+  getLogs: async () => {
+    return apiFetch('/api/national/logs', {
+      method: 'GET'
+    });
+  },
+  
+  getActiveRequests: async () => {
+    return apiFetch('/api/national/active-requests', {
+      method: 'GET'
+    });
+  }
+};

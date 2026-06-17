@@ -33,8 +33,11 @@ const screens = {
   landing: document.getElementById('screen-landing'),
   auth: document.getElementById('screen-auth'),
   userDashboard: document.getElementById('screen-user-dashboard'),
-  driverDashboard: document.getElementById('screen-driver-dashboard')
+  driverDashboard: document.getElementById('screen-driver-dashboard'),
+  eccDashboard: document.getElementById('screen-ecc-dashboard')
 };
+
+const roleEccBtn = document.getElementById('role-select-ecc');
 
 const authForm = document.getElementById('auth-form');
 const authTitle = document.getElementById('auth-title');
@@ -286,7 +289,11 @@ function loadSessionUser() {
     requestNotificationPermissionAndSubscribe();
 
     // Route to appropriate dashboard
-    if (currentUser.role === 'driver') {
+    const storedRole = localStorage.getItem('role') || selectedRole;
+    if (storedRole === 'ecc') {
+      showScreen('eccDashboard');
+      initECCConsole();
+    } else if (currentUser.role === 'driver' || storedRole === 'driver') {
       showScreen('driverDashboard');
       initDriverConsole();
     } else {
@@ -445,6 +452,13 @@ function setupEventListeners() {
     showScreen('auth');
   });
 
+  document.getElementById('landing-ecc-btn').addEventListener('click', () => {
+    selectedRole = 'ecc';
+    toggleAuthFormState(false); // Mode: Login
+    updateRoleSelectorUI();
+    showScreen('auth');
+  });
+
   // Role Toggles inside Login Card
   roleUserBtn.addEventListener('click', () => {
     selectedRole = 'user';
@@ -453,6 +467,11 @@ function setupEventListeners() {
 
   roleDriverBtn.addEventListener('click', () => {
     selectedRole = 'driver';
+    updateRoleSelectorUI();
+  });
+
+  roleEccBtn.addEventListener('click', () => {
+    selectedRole = 'ecc';
     updateRoleSelectorUI();
   });
 
@@ -478,6 +497,7 @@ function setupEventListeners() {
     }
 
     clearAuth();
+    localStorage.removeItem('role');
     disconnectSocket();
     loadSessionUser();
   });
@@ -532,14 +552,22 @@ function updateRoleSelectorUI() {
   if (selectedRole === 'driver') {
     roleDriverBtn.classList.add('active');
     roleUserBtn.classList.remove('active');
+    roleEccBtn.classList.remove('active');
     
     if (isRegisterMode) {
       driverVehicleField.classList.remove('hidden');
       driverTypeField.classList.remove('hidden');
     }
+  } else if (selectedRole === 'ecc') {
+    roleEccBtn.classList.add('active');
+    roleUserBtn.classList.remove('active');
+    roleDriverBtn.classList.remove('active');
+    driverVehicleField.classList.add('hidden');
+    driverTypeField.classList.add('hidden');
   } else {
     roleUserBtn.classList.add('active');
     roleDriverBtn.classList.remove('active');
+    roleEccBtn.classList.remove('active');
     driverVehicleField.classList.add('hidden');
     driverTypeField.classList.add('hidden');
   }
@@ -608,6 +636,7 @@ async function handleAuthSubmit(e) {
     if (response.success) {
       setAuthToken(response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
+      localStorage.setItem('role', selectedRole);
       
       // Clear forms
       authForm.reset();
@@ -1437,4 +1466,308 @@ function setupSocketListeners(socket) {
       refreshNotifications();
     }
   });
+}
+
+// --- NATIONAL EMERGENCY CONTROL CENTER (ECC) OPERATIONS ---
+let eccMarkers = [];
+let eccPolylines = [];
+
+async function initECCConsole() {
+  selectedECCTab = 'map';
+  
+  // Reset active tabs
+  document.getElementById('ecc-tab-btn-map').classList.add('active');
+  document.getElementById('ecc-tab-btn-hospitals').classList.remove('active');
+  document.getElementById('ecc-tab-btn-police').classList.remove('active');
+  document.getElementById('ecc-tab-btn-logs').classList.remove('active');
+
+  document.getElementById('ecc-tab-map').classList.remove('hidden');
+  document.getElementById('ecc-tab-hospitals').classList.add('hidden');
+  document.getElementById('ecc-tab-police').classList.add('hidden');
+  document.getElementById('ecc-tab-logs').classList.add('hidden');
+
+  // Initialize interactive Google GIS Map for ECC Command
+  if (!window.eccGoogleMap && typeof google !== 'undefined') {
+    const mapContainer = document.getElementById('ecc-map-container');
+    mapContainer.innerHTML = ''; // Clear simulated elements
+    window.eccGoogleMap = new google.maps.Map(mapContainer, {
+      center: { lat: 12.9715, lng: 77.5945 }, // Default center: Bangalore
+      zoom: 13,
+      styles: darkMapStyles,
+      disableDefaultUI: false
+    });
+  }
+
+  // Initial fetch and start polling
+  refreshECCDashboard();
+  if (window.eccPollIntervalId) clearInterval(window.eccPollIntervalId);
+  window.eccPollIntervalId = setInterval(refreshECCDashboard, 5000);
+
+  // Modal event hooks
+  document.getElementById('modal-close-btn').addEventListener('click', () => {
+    document.getElementById('capacity-modal').style.display = 'none';
+  });
+
+  document.getElementById('modal-save-btn').addEventListener('click', saveHospitalCapacityChange);
+}
+
+async function refreshECCDashboard() {
+  if (screens.eccDashboard.classList.contains('hidden')) {
+    // Stop polling if not showing ECC screen anymore
+    if (window.eccPollIntervalId) {
+      clearInterval(window.eccPollIntervalId);
+      window.eccPollIntervalId = null;
+    }
+    return;
+  }
+
+  try {
+    // 1. Fetch active requests & plot on map
+    const activeReqsData = await NationalAPI.getActiveRequests();
+    const activeRequests = activeReqsData.requests || [];
+    
+    // Clear old active markers/lines
+    eccMarkers.forEach(m => m.setMap(null));
+    eccMarkers = [];
+    eccPolylines.forEach(p => p.setMap(null));
+    eccPolylines = [];
+
+    // Render Escalation Panel Sidebar
+    const escListContainer = document.getElementById('ecc-escalation-list');
+    escListContainer.innerHTML = '';
+
+    if (activeRequests.length === 0) {
+      escListContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem 0;">No active emergency dispatches</div>`;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    let hasPointsForBounds = false;
+
+    activeRequests.forEach(req => {
+      // 1.1 Sidebar entry
+      const elapsedSeconds = Math.round((new Date() - new Date(req.created_at)) / 1000);
+      let escBadgeText = 'Level 0: Alerting Drivers';
+      let escColorClass = 'cyan';
+      if (req.escalation_step === 1) { escBadgeText = 'Level 1: Twilio SMS/Voice'; escColorClass = 'warning'; }
+      if (req.escalation_step === 2) { escBadgeText = 'Level 2: Hospital Alerted'; escColorClass = 'warning'; }
+      if (req.escalation_step === 3) { escBadgeText = 'Level 3: ECC manual override'; escColorClass = 'danger'; }
+      if (req.escalation_step === 4) { escBadgeText = 'Level 4: MAXIMUM PRIORITY'; escColorClass = 'danger'; }
+
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.style.background = 'rgba(255, 255, 255, 0.02)';
+      item.style.marginBottom = '0.75rem';
+      item.innerHTML = `
+        <div class="list-item-header">
+          <div>
+            <div class="list-item-title">Case #${req.id} - ${req.victim_name}</div>
+            <div class="list-item-subtitle">Status: <strong style="text-transform:uppercase; color:var(--accent-cyan);">${req.status}</strong></div>
+          </div>
+          <span class="list-item-badge ${escColorClass}" style="font-size:0.75rem;">${escBadgeText}</span>
+        </div>
+        <div style="font-size: 0.85rem; margin-top: 0.5rem; display:flex; justify-content:space-between;">
+          <span>Elapsed Time: <strong>${elapsedSeconds}s</strong></span>
+          <span>Assignee: <strong>${req.driver_name ? req.driver_name + ' (' + req.vehicle_number + ')' : 'Searching...'}</strong></span>
+        </div>
+        ${req.recommended_hospital_name ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;"><i class="fa-solid fa-hospital"></i> Recommended: ${req.recommended_hospital_name}</div>` : ''}
+      `;
+      escListContainer.appendChild(item);
+
+      // 1.2 Google map markers plotting
+      if (window.eccGoogleMap) {
+        // Victim Marker
+        const victimPos = { lat: parseFloat(req.user_latitude), lng: parseFloat(req.user_longitude) };
+        const victimMarker = new google.maps.Marker({
+          position: victimPos,
+          map: window.eccGoogleMap,
+          title: `Victim: ${req.victim_name}`,
+          icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+        });
+        eccMarkers.push(victimMarker);
+        bounds.extend(victimPos);
+        hasPointsForBounds = true;
+
+        // Driver Marker (if assigned)
+        if (req.driver_id) {
+          const drvPos = { lat: parseFloat(req.user_latitude) + 0.003, lng: parseFloat(req.user_longitude) - 0.003 };
+          const driverMarker = new google.maps.Marker({
+            position: drvPos,
+            map: window.eccGoogleMap,
+            title: `Driver: ${req.driver_name}`,
+            icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+          });
+          eccMarkers.push(driverMarker);
+          bounds.extend(drvPos);
+
+          // Polyline route
+          const polyline = new google.maps.Polyline({
+            path: [drvPos, victimPos],
+            strokeColor: '#00f0ff',
+            strokeOpacity: 0.7,
+            strokeWeight: 3,
+            map: window.eccGoogleMap
+          });
+          eccPolylines.push(polyline);
+        }
+      }
+    });
+
+    // 2. Fetch hospitals & capacities
+    const hospitalsData = await NationalAPI.getHospitals();
+    const hospitals = hospitalsData.hospitals || [];
+    
+    document.getElementById('ecc-hospital-count').textContent = `${hospitals.length} Active`;
+    
+    const tableBody = document.getElementById('ecc-hospitals-table-body');
+    tableBody.innerHTML = '';
+
+    hospitals.forEach(h => {
+      const row = document.createElement('tr');
+      row.style.borderBottom = '1px solid var(--border-light)';
+      row.innerHTML = `
+        <td style="padding:0.75rem; font-weight:600; color:var(--text-primary);">${h.name}</td>
+        <td style="padding:0.75rem; color:var(--text-muted);">${h.address || '--'}</td>
+        <td style="padding:0.75rem;">
+          <span style="color: ${h.available_beds > 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${h.available_beds}</span> / ${h.total_beds}
+        </td>
+        <td style="padding:0.75rem;">
+          <span style="color: ${h.available_icu_beds > 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${h.available_icu_beds}</span> / ${h.total_icu_beds}
+        </td>
+        <td style="padding:0.75rem; text-align:center;">
+          <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.8rem;" onclick="openCapacityEditor(${h.id}, '${h.name.replace(/'/g, "\\'")}', ${h.total_beds}, ${h.available_beds}, ${h.total_icu_beds}, ${h.available_icu_beds})">
+            <i class="fa-solid fa-pen-to-square"></i> Edit
+          </button>
+        </td>
+      `;
+      tableBody.appendChild(row);
+
+      // Plot hospital marker on map
+      if (window.eccGoogleMap) {
+        const hospPos = { lat: parseFloat(h.latitude), lng: parseFloat(h.longitude) };
+        const hospMarker = new google.maps.Marker({
+          position: hospPos,
+          map: window.eccGoogleMap,
+          title: `${h.name} (Beds: ${h.available_beds}, ICU: ${h.available_icu_beds})`,
+          icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+        });
+        eccMarkers.push(hospMarker);
+        bounds.extend(hospPos);
+        hasPointsForBounds = true;
+      }
+    });
+
+    if (window.eccGoogleMap && hasPointsForBounds) {
+      window.eccGoogleMap.fitBounds(bounds);
+    }
+
+    // 3. Fetch police alerts feed
+    const policeData = await NationalAPI.getPoliceAlerts();
+    const policeAlerts = policeData.alerts || [];
+    const policeTableBody = document.getElementById('ecc-police-table-body');
+    policeTableBody.innerHTML = '';
+    
+    if (policeAlerts.length === 0) {
+      policeTableBody.innerHTML = `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">No police alerts logged</td></tr>`;
+    } else {
+      policeAlerts.forEach(a => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid var(--border-light)';
+        row.innerHTML = `
+          <td style="padding:0.75rem; font-weight:700; color:var(--text-cyan);">POL-${a.id}</td>
+          <td style="padding:0.75rem;">REQ-${a.request_id}</td>
+          <td style="padding:0.75rem;">${a.victim_name}</td>
+          <td style="padding:0.75rem; font-family:monospace;">${a.badge_number}</td>
+          <td style="padding:0.75rem;"><span class="list-item-badge danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;">${a.status.toUpperCase()}</span></td>
+          <td style="padding:0.75rem; color:var(--text-muted); font-size:0.8rem;">${new Date(a.created_at).toLocaleString()}</td>
+        `;
+        policeTableBody.appendChild(row);
+      });
+    }
+
+    // 4. Fetch twilio gateways audit logs
+    const logsData = await NationalAPI.getLogs();
+    const logs = logsData.logs || [];
+    const logsTableBody = document.getElementById('ecc-logs-table-body');
+    logsTableBody.innerHTML = '';
+
+    if (logs.length === 0) {
+      logsTableBody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">No gateway transmissions recorded</td></tr>`;
+    } else {
+      logs.forEach(l => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid var(--border-light)';
+        row.innerHTML = `
+          <td style="padding:0.75rem; font-weight:700;"><span class="list-item-badge ${l.type === 'SMS' ? 'cyan' : 'warning'}" style="padding:0.2rem 0.5rem; font-size:0.75rem;">${l.type}</span></td>
+          <td style="padding:0.75rem; font-family:monospace;">${l.recipient_phone}</td>
+          <td style="padding:0.75rem; max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color:var(--text-secondary);" title="${l.content}">${l.content}</td>
+          <td style="padding:0.75rem;"><span style="color:#10b981; font-weight:600;">${l.status.toUpperCase()}</span></td>
+          <td style="padding:0.75rem; color:var(--text-muted); font-size:0.8rem;">${new Date(l.created_at).toLocaleString()}</td>
+        `;
+        logsTableBody.appendChild(row);
+      });
+    }
+
+  } catch (error) {
+    console.error('Error refreshing ECC dashboard:', error.message);
+  }
+}
+
+// Global functions exposed to inline html handlers
+window.switchECCTab = function(tabName) {
+  // Update tabs buttons active states
+  document.getElementById('ecc-tab-btn-map').classList.toggle('active', tabName === 'map');
+  document.getElementById('ecc-tab-btn-hospitals').classList.toggle('active', tabName === 'hospitals');
+  document.getElementById('ecc-tab-btn-police').classList.toggle('active', tabName === 'police');
+  document.getElementById('ecc-tab-btn-logs').classList.toggle('active', tabName === 'logs');
+
+  // Update tabs content visibility
+  document.getElementById('ecc-tab-map').classList.toggle('hidden', tabName !== 'map');
+  document.getElementById('ecc-tab-map').classList.toggle('active', tabName === 'map');
+  
+  document.getElementById('ecc-tab-hospitals').classList.toggle('hidden', tabName !== 'hospitals');
+  document.getElementById('ecc-tab-hospitals').classList.toggle('active', tabName === 'hospitals');
+  
+  document.getElementById('ecc-tab-police').classList.toggle('hidden', tabName !== 'police');
+  document.getElementById('ecc-tab-police').classList.toggle('active', tabName === 'police');
+  
+  document.getElementById('ecc-tab-logs').classList.toggle('hidden', tabName !== 'logs');
+  document.getElementById('ecc-tab-logs').classList.toggle('active', tabName === 'logs');
+
+  if (tabName === 'map' && window.eccGoogleMap) {
+    google.maps.event.trigger(window.eccGoogleMap, 'resize');
+    refreshECCDashboard();
+  }
+};
+
+window.openCapacityEditor = function(id, name, totalBeds, availBeds, totalIcu, availIcu) {
+  document.getElementById('modal-hospital-id').value = id;
+  document.getElementById('modal-hospital-name').textContent = `Edit Capacity: ${name}`;
+  document.getElementById('modal-total-beds').value = totalBeds;
+  document.getElementById('modal-avail-beds').value = availBeds;
+  document.getElementById('modal-total-icu').value = totalIcu;
+  document.getElementById('modal-avail-icu').value = availIcu;
+  
+  document.getElementById('capacity-modal').style.display = 'flex';
+};
+
+async function saveHospitalCapacityChange() {
+  const id = document.getElementById('modal-hospital-id').value;
+  const payload = {
+    total_beds: parseInt(document.getElementById('modal-total-beds').value || 0),
+    available_beds: parseInt(document.getElementById('modal-avail-beds').value || 0),
+    total_icu_beds: parseInt(document.getElementById('modal-total-icu').value || 0),
+    available_icu_beds: parseInt(document.getElementById('modal-avail-icu').value || 0)
+  };
+
+  try {
+    const res = await NationalAPI.updateHospitalCapacity(id, payload);
+    if (res.success) {
+      document.getElementById('capacity-modal').style.display = 'none';
+      refreshECCDashboard();
+    } else {
+      alert(`Failed to save: ${res.message}`);
+    }
+  } catch (error) {
+    alert(`Error updating capacity: ${error.message}`);
+  }
 }
