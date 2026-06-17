@@ -6,6 +6,28 @@ let locationWatchId = null;
 let driverLocationIntervalId = null;
 let simulatedMovementIntervalId = null;
 
+// Sleek dark cyberpunk theme style parameters for Google Maps
+const darkMapStyles = [
+  { "elementType": "geometry", "stylers": [{ "color": "#0b1329" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#0b1329" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#8b9bb4" }] },
+  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#00f0ff" }] },
+  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#00f0ff" }] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#112240" }] },
+  { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{ "color": "#8b9bb4" }] },
+  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#1d2948" }] },
+  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#2b3b5c" }] },
+  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#8b9bb4" }] },
+  { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#00f0ff" }, { "weight": 0.5 }] },
+  { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [{ "color": "#1d2948" }] },
+  { "featureType": "transit", "elementType": "geometry", "stylers": [{ "color": "#1d2948" }] },
+  { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [{ "color": "#00f0ff" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#070b19" }] },
+  { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#515c6d" }] },
+  { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [{ "color": "#070b19" }] }
+];
+
+
 // DOM Cache Elements
 const screens = {
   landing: document.getElementById('screen-landing'),
@@ -604,35 +626,36 @@ async function initUserConsole() {
   userTrackingPanel.classList.add('hidden');
   trackingDriverDetails.classList.add('hidden');
   
-  // Set up interactive Leaflet GIS Map for Citizen
-  if (!window.leafletUserMap && typeof L !== 'undefined') {
+  // Set up interactive Google GIS Map for Citizen
+  if (!window.leafletUserMap && typeof google !== 'undefined') {
     const mapContainer = document.getElementById('user-map-container');
     mapContainer.innerHTML = ''; // Clear simulated elements
-    window.leafletUserMap = L.map('user-map-container').setView([userCoords.latitude, userCoords.longitude], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(window.leafletUserMap);
+    window.leafletUserMap = new google.maps.Map(mapContainer, {
+      center: { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) },
+      zoom: 14,
+      styles: darkMapStyles,
+      disableDefaultUI: true
+    });
 
-    window.leafletUserMarker = L.marker([userCoords.latitude, userCoords.longitude], {
-      icon: L.divIcon({
-        className: 'custom-map-icon user-icon',
-        html: '<i class="fa-solid fa-person-falling-burst" style="color:var(--status-danger); font-size:24px;"></i>',
-        iconSize: [24, 24]
-      })
-    }).addTo(window.leafletUserMap).bindPopup('Accident Site').openPopup();
+    window.leafletUserMarker = new google.maps.Marker({
+      position: { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) },
+      map: window.leafletUserMap,
+      title: 'Accident Site',
+      icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    });
   } else if (window.leafletUserMap) {
-    window.leafletUserMap.setView([userCoords.latitude, userCoords.longitude], 14);
+    window.leafletUserMap.setCenter({ lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) });
     if (window.leafletUserMarker) {
-      window.leafletUserMarker.setLatLng([userCoords.latitude, userCoords.longitude]);
+      window.leafletUserMarker.setPosition({ lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) });
     }
     
     // Clean up active tracking layers
     if (window.leafletDriverMarker) {
-      window.leafletUserMap.removeLayer(window.leafletDriverMarker);
+      window.leafletDriverMarker.setMap(null);
       window.leafletDriverMarker = null;
     }
     if (window.leafletUserRoute) {
-      window.leafletUserMap.removeLayer(window.leafletUserRoute);
+      window.leafletUserRoute.setMap(null);
       window.leafletUserRoute = null;
     }
   }
@@ -854,34 +877,36 @@ function handleRequestStateChange(request) {
 
 function updateDriverMarkerOnSimulatedMap(drvLat, drvLng) {
   if (window.leafletUserMap && window.leafletUserMarker) {
-    const drvPos = [parseFloat(drvLat), parseFloat(drvLng)];
-    const usrPos = [userCoords.latitude, userCoords.longitude];
+    const drvPos = { lat: parseFloat(drvLat), lng: parseFloat(drvLng) };
+    const usrPos = { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) };
     
     if (!window.leafletDriverMarker) {
-      window.leafletDriverMarker = L.marker(drvPos, {
-        icon: L.divIcon({
-          className: 'custom-map-icon driver-icon',
-          html: '<i class="fa-solid fa-truck-medical" style="color:var(--accent-cyan); font-size:24px;"></i>',
-          iconSize: [24, 24]
-        })
-      }).addTo(window.leafletUserMap).bindPopup(`Ambulance: ${activeRequest.vehicleNumber}`).openPopup();
+      window.leafletDriverMarker = new google.maps.Marker({
+        position: drvPos,
+        map: window.leafletUserMap,
+        title: `Ambulance: ${activeRequest.vehicleNumber}`,
+        icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+      });
     } else {
-      window.leafletDriverMarker.setLatLng(drvPos);
+      window.leafletDriverMarker.setPosition(drvPos);
     }
     
     if (!window.leafletUserRoute) {
-      window.leafletUserRoute = L.polyline([drvPos, usrPos], {
-        color: 'var(--accent-cyan)',
-        weight: 4,
-        opacity: 0.8,
-        dashArray: '5, 10'
-      }).addTo(window.leafletUserMap);
+      window.leafletUserRoute = new google.maps.Polyline({
+        path: [drvPos, usrPos],
+        strokeColor: '#00f0ff',
+        strokeOpacity: 0.8,
+        strokeWeight: 4,
+        map: window.leafletUserMap
+      });
     } else {
-      window.leafletUserRoute.setLatLngs([drvPos, usrPos]);
+      window.leafletUserRoute.setPath([drvPos, usrPos]);
     }
     
-    const group = new L.featureGroup([window.leafletUserMarker, window.leafletDriverMarker]);
-    window.leafletUserMap.fitBounds(group.getBounds().pad(0.15));
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend(window.leafletUserMarker.getPosition());
+    bounds.extend(window.leafletDriverMarker.getPosition());
+    window.leafletUserMap.fitBounds(bounds);
   }
 }
 
@@ -891,35 +916,36 @@ async function initDriverConsole() {
   driverEmptyPanel.classList.remove('hidden');
   driverActivePanel.classList.add('hidden');
   
-  // Set up interactive Leaflet GIS Map for Driver
-  if (!window.leafletDriverMap && typeof L !== 'undefined') {
+  // Set up interactive Google GIS Map for Driver
+  if (!window.leafletDriverMap && typeof google !== 'undefined') {
     const mapContainer = document.getElementById('driver-map-container');
     mapContainer.innerHTML = ''; // Clear simulated elements
-    window.leafletDriverMap = L.map('driver-map-container').setView([userCoords.latitude, userCoords.longitude], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(window.leafletDriverMap);
+    window.leafletDriverMap = new google.maps.Map(mapContainer, {
+      center: { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) },
+      zoom: 14,
+      styles: darkMapStyles,
+      disableDefaultUI: true
+    });
 
-    window.leafletDriverSelfMarker = L.marker([userCoords.latitude, userCoords.longitude], {
-      icon: L.divIcon({
-        className: 'custom-map-icon driver-icon',
-        html: '<i class="fa-solid fa-truck-medical" style="color:var(--accent-cyan); font-size:24px;"></i>',
-        iconSize: [24, 24]
-      })
-    }).addTo(window.leafletDriverMap).bindPopup('My Location').openPopup();
+    window.leafletDriverSelfMarker = new google.maps.Marker({
+      position: { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) },
+      map: window.leafletDriverMap,
+      title: 'My Location',
+      icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+    });
   } else if (window.leafletDriverMap) {
-    window.leafletDriverMap.setView([userCoords.latitude, userCoords.longitude], 14);
+    window.leafletDriverMap.setCenter({ lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) });
     if (window.leafletDriverSelfMarker) {
-      window.leafletDriverSelfMarker.setLatLng([userCoords.latitude, userCoords.longitude]);
+      window.leafletDriverSelfMarker.setPosition({ lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) });
     }
     
     // Clean up active mission elements
     if (window.leafletDriverTargetMarker) {
-      window.leafletDriverMap.removeLayer(window.leafletDriverTargetMarker);
+      window.leafletDriverTargetMarker.setMap(null);
       window.leafletDriverTargetMarker = null;
     }
     if (window.leafletDriverRoute) {
-      window.leafletDriverMap.removeLayer(window.leafletDriverRoute);
+      window.leafletDriverRoute.setMap(null);
       window.leafletDriverRoute = null;
     }
   }
@@ -1113,36 +1139,38 @@ async function enterActiveMissionConsole(requestId) {
       driverArriveBtn.classList.remove('hidden');
       driverCompleteBtn.classList.add('hidden');
 
-      // Update Leaflet target marker and route line
+      // Update Google Maps target marker and route line
       if (window.leafletDriverMap) {
-        const usrPos = [parseFloat(activeRequest.userLatitude), parseFloat(activeRequest.userLongitude)];
-        const drvPos = [userCoords.latitude, userCoords.longitude];
+        const usrPos = { lat: parseFloat(activeRequest.userLatitude), lng: parseFloat(activeRequest.userLongitude) };
+        const drvPos = { lat: parseFloat(userCoords.latitude), lng: parseFloat(userCoords.longitude) };
         
         if (!window.leafletDriverTargetMarker) {
-          window.leafletDriverTargetMarker = L.marker(usrPos, {
-            icon: L.divIcon({
-              className: 'custom-map-icon user-icon',
-              html: '<i class="fa-solid fa-person-falling-burst" style="color:var(--status-danger); font-size:24px;"></i>',
-              iconSize: [24, 24]
-            })
-          }).addTo(window.leafletDriverMap).bindPopup('Accident Site').openPopup();
+          window.leafletDriverTargetMarker = new google.maps.Marker({
+            position: usrPos,
+            map: window.leafletDriverMap,
+            title: 'Accident Site',
+            icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+          });
         } else {
-          window.leafletDriverTargetMarker.setLatLng(usrPos);
+          window.leafletDriverTargetMarker.setPosition(usrPos);
         }
         
         if (!window.leafletDriverRoute) {
-          window.leafletDriverRoute = L.polyline([drvPos, usrPos], {
-            color: 'var(--status-danger)',
-            weight: 4,
-            opacity: 0.8,
-            dashArray: '5, 10'
-          }).addTo(window.leafletDriverMap);
+          window.leafletDriverRoute = new google.maps.Polyline({
+            path: [drvPos, usrPos],
+            strokeColor: '#ff0055',
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+            map: window.leafletDriverMap
+          });
         } else {
-          window.leafletDriverRoute.setLatLngs([drvPos, usrPos]);
+          window.leafletDriverRoute.setPath([drvPos, usrPos]);
         }
         
-        const group = new L.featureGroup([window.leafletDriverSelfMarker, window.leafletDriverTargetMarker]);
-        window.leafletDriverMap.fitBounds(group.getBounds().pad(0.15));
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(window.leafletDriverSelfMarker.getPosition());
+        bounds.extend(window.leafletDriverTargetMarker.getPosition());
+        window.leafletDriverMap.fitBounds(bounds);
       }
       
       // Simulate real-time driver movement towards destination (for interactive presentation testing)
@@ -1181,12 +1209,12 @@ function simulateDriverMovementToDestination() {
     userCoords.latitude = latDrift;
     userCoords.longitude = lngDrift;
     
-    // Update Leaflet layers
+    // Update Google Maps layers
     if (window.leafletDriverMap && window.leafletDriverSelfMarker) {
-      const drvPos = [latDrift, lngDrift];
-      window.leafletDriverSelfMarker.setLatLng(drvPos);
+      const drvPos = { lat: latDrift, lng: lngDrift };
+      window.leafletDriverSelfMarker.setPosition(drvPos);
       if (window.leafletDriverRoute) {
-        window.leafletDriverRoute.setLatLngs([drvPos, [destLat, destLng]]);
+        window.leafletDriverRoute.setPath([drvPos, { lat: destLat, lng: destLng }]);
       }
     }
     

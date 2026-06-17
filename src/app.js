@@ -35,6 +35,7 @@ fastify.register(require('./routes/driver'), { prefix: '/api/driver' });
 fastify.register(require('./routes/user'), { prefix: '/api/user' });
 fastify.register(require('./routes/emergency'), { prefix: '/api/emergency' });
 fastify.register(require('./routes/notifications'), { prefix: '/api/notifications' });
+fastify.register(require('./routes/national'), { prefix: '/api/national' });
 
 // Health check endpoint
 fastify.get('/health', async (request, reply) => {
