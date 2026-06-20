@@ -288,12 +288,11 @@ function loadSessionUser() {
     // Prompt and register Web Push Subscription
     requestNotificationPermissionAndSubscribe();
 
-    // Route to appropriate dashboard
-    const storedRole = localStorage.getItem('role') || selectedRole;
-    if (storedRole === 'ecc') {
+    // Route to appropriate dashboard securely based on database role
+    if (currentUser.role === 'ecc') {
       showScreen('eccDashboard');
       initECCConsole();
-    } else if (currentUser.role === 'driver' || storedRole === 'driver') {
+    } else if (currentUser.role === 'driver') {
       showScreen('driverDashboard');
       initDriverConsole();
     } else {

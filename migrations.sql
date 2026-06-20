@@ -12,7 +12,7 @@ DROP TYPE IF EXISTS request_status CASCADE;
 DROP TYPE IF EXISTS user_role CASCADE;
 
 -- Create Types
-CREATE TYPE user_role AS ENUM ('user', 'driver');
+CREATE TYPE user_role AS ENUM ('user', 'driver', 'ecc');
 CREATE TYPE request_status AS ENUM ('pending', 'accepted', 'arrived', 'completed', 'cancelled');
 
 -- Create Tables

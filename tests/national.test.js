@@ -148,4 +148,51 @@ describe('National Emergency Dispatch System Tests', () => {
     await db.query('DELETE FROM activity_logs WHERE user_id = $1 AND action = $2', [userId, 'ESCALATION_PRIORITY']);
   });
 
+  test('ECC Role Authentication: Registering and logging in with role ecc retrieves role ecc from DB and token', async () => {
+    const randomEmail = `ecc_user_${Math.floor(Math.random() * 1000000)}@test.com`;
+    
+    // 1. Register with role: 'ecc'
+    const registerRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        name: 'ECC Commander',
+        email: randomEmail,
+        password: 'password123',
+        phone: '+919000000001',
+        role: 'ecc'
+      }
+    });
+
+    expect(registerRes.statusCode).toBe(201);
+    const registerBody = JSON.parse(registerRes.body);
+    expect(registerBody.success).toBe(true);
+    expect(registerBody.user.role).toBe('ecc');
+    
+    const eccUserId = registerBody.user.id;
+
+    // 2. Login and verify JWT role claim is 'ecc'
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        email: randomEmail,
+        password: 'password123'
+      }
+    });
+
+    expect(loginRes.statusCode).toBe(200);
+    const loginBody = JSON.parse(loginRes.body);
+    expect(loginBody.success).toBe(true);
+    expect(loginBody.user.role).toBe('ecc');
+
+    // Decode token to verify payload contains role: 'ecc'
+    const decoded = app.jwt.verify(loginBody.token);
+    expect(decoded.role).toBe('ecc');
+
+    // 3. Clean up database user
+    await db.query('DELETE FROM users WHERE id = $1', [eccUserId]);
+  });
+
 });
+

@@ -15,7 +15,7 @@ module.exports = async function (fastify, opts) {
       });
     }
 
-    const userRole = role === 'driver' ? 'driver' : 'user';
+    const userRole = (role === 'driver' || role === 'ecc') ? role : 'user';
 
     // If registering as a driver, require vehicle number and ambulance type
     if (userRole === 'driver' && (!vehicle_number || !ambulance_type)) {
